@@ -5,6 +5,7 @@ import {AuthenticatedFileLink} from './AuthenticatedFiles';
 import WorkflowView from './WorkflowView';
 import RecordWorkflowDrawer from './RecordWorkflowDrawer';
 import PolicyLibrary from './PolicyLibrary';
+import {AutomationToolbar} from './Automation';
 import type {WorkflowStepId} from './workflow';
 
 type IconName = 'grid' | 'receipt' | 'folder' | 'history' | 'arrow' | 'search' | 'refresh' | 'download' | 'plus' | 'close' | 'check' | 'info' | 'external' | 'upload' | 'chevron' | 'shield' | 'link';
@@ -89,7 +90,7 @@ export default function App() {
     <main className="workbench-main">
       <header className="workbench-header">
         <div className="workbench-identity"><span className="workbench-mark"><Icon name="receipt" size={24} /></span><div><h1>报销流程</h1><p><span>ChatGPT</span><span>{years} 年</span><span>{isRemoteAPI() ? '云端工作区' : '本地工作区'}</span></p></div></div>
-        <div className="workbench-actions"><button className="button secondary" onClick={() => openUtility('policies')} disabled={!data}><Icon name="shield" size={16} />规则依据</button><button className="button secondary" onClick={() => void reload().catch(() => {})} disabled={loading}><Icon name="refresh" size={16} className={loading ? 'spin' : ''} />刷新</button><details className="workbench-menu" ref={menuRef}><summary className="button secondary">更多 <Icon name="chevron" size={14} /></summary><div className="workbench-menu-items"><button onClick={() => openUtility('materials')}>材料与来源</button><button onClick={() => openUtility('arp')}>ARP 原始记录</button><button onClick={() => openUtility('activity')}>操作记录</button><AuthenticatedFileLink href={'/api/export'} download="reimbursement-export.json">导出台账</AuthenticatedFileLink></div></details></div>
+        <div className="workbench-actions">{data&&<AutomationToolbar data={data} onReload={reload}/>}<button className="button secondary" onClick={() => openUtility('policies')} disabled={!data}><Icon name="shield" size={16} />规则依据</button><button className="button secondary" onClick={() => void reload().catch(() => {})} disabled={loading}><Icon name="refresh" size={16} className={loading ? 'spin' : ''} />刷新</button><details className="workbench-menu" ref={menuRef}><summary className="button secondary">更多 <Icon name="chevron" size={14} /></summary><div className="workbench-menu-items"><button onClick={() => openUtility('materials')}>材料与来源</button><button onClick={() => openUtility('arp')}>ARP 原始记录</button><button onClick={() => openUtility('activity')}>操作记录</button><AuthenticatedFileLink href={'/api/export'} download="reimbursement-export.json">导出台账</AuthenticatedFileLink></div></details></div>
       </header>
       <Feedback error={error} />
       {data ? <WorkflowView data={data} onReload={reload} onOpenRecord={openRecord} onOpenMaterials={() => openUtility('materials')} onOpenARP={() => openUtility('arp')} /> : loading ? <div className="loading-state"><Icon name="refresh" className="spin" /><p>正在读取台账…</p></div> : <Empty title="无法读取台账">请确认本地服务已启动，再刷新页面。</Empty>}

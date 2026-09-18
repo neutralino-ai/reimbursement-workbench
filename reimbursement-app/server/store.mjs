@@ -506,7 +506,7 @@ export function createStore({ dataDir, legacyDir }) {
     const file = readTrustedFile(originals, row.stored_filename);
     if (!file) fail('材料原件缺失。', 409);
     if (hash(file.bytes) !== row.sha256) fail('材料内容与登记哈希不符，已阻止下载。', 409);
-    const mime = { '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.csv': 'text/csv; charset=utf-8', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }[path.extname(row.filename).toLowerCase()] || 'application/octet-stream';
+    const mime = { '.zip': 'application/zip', '.webp': 'image/webp', '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.csv': 'text/csv; charset=utf-8', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }[path.extname(row.filename).toLowerCase()] || 'application/octet-stream';
     return { path: file.target, filename: row.filename, mime };
   }
 

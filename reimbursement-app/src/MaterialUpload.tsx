@@ -4,7 +4,7 @@ import type { RecordItem, Workspace } from './types';
 
 export default function MaterialUpload({ record, role, onReload, onBusy, disabled = false }: {
   record: RecordItem;
-  role: 'invoice' | 'payment';
+  role: 'invoice' | 'payment' | 'purposeEvidence';
   onReload: () => Promise<Workspace>;
   onBusy: (value: boolean) => void;
   disabled?: boolean;
@@ -13,7 +13,7 @@ export default function MaterialUpload({ record, role, onReload, onBusy, disable
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const label = role === 'payment' ? '付款截图或 PDF' : '发票 PDF 或图片';
+  const label = role === 'payment' ? '付款截图或 PDF' : role==='purposeEvidence' ? '用途截图或 PDF' : '发票 PDF 或图片';
   async function upload(file: File) {
     setError(''); setSuccess('');
     if (!file.size || file.size > 20 * 1024 * 1024) { setError('请选择 20 MB 以内的文件。'); if (input.current) input.current.value = ''; return; }
@@ -32,7 +32,7 @@ export default function MaterialUpload({ record, role, onReload, onBusy, disable
       });
       saved = true;
       await onReload();
-      setSuccess(role === 'payment' ? '原件已保存，待核对商户、日期和金额。' : '发票文件已保存。');
+      setSuccess(role==='purposeEvidence'?'用途原件已保存。':'原件已保存；启用自动核验后服务器将继续处理。');
     } catch (failure) {
       setError(saved ? '文件已保存，台账刷新失败。请刷新后查看。' : failure instanceof Error ? failure.message : '上传失败。');
     } finally { setBusy(false); onBusy(false); if (input.current) input.current.value = ''; }

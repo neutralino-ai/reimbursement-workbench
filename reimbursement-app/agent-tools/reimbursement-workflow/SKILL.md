@@ -1,11 +1,11 @@
 ---
 name: reimbursement-workflow
-description: Use the reimbursement workbench MCP or CLI to organize GPT subscription invoices, payment evidence, ARP approvals, and generated reimbursement documents in the configured cloud or local ledger. Apply when asked to collect, reconcile, prepare, or maintain reimbursement records; browser collection and document authoring remain the agent's capabilities.
+description: Use the reimbursement workbench MCP or CLI to organize GPT subscription invoices, payment evidence, ARP approvals, and generated reimbursement documents in the configured cloud or local ledger. Apply when asked to collect, reconcile, prepare, or maintain reimbursement records; browser collection remains external, with optional backend AI review and document generation.
 ---
 
 # Reimbursement workflow
 
-Maintain an evidence-backed reimbursement ledger. The application stores files, records, tasks, and audit history; Codex operates websites, reads pictures/PDFs, and creates documents. The UI lets the user verify results and correct exceptions. Routine authorized work does not require a separate approval at every step.
+Maintain an evidence-backed reimbursement ledger. The application stores files, records, tasks, and audit history. Codex operates websites; uploaded evidence can also use the configured backend DeepSeek review and deterministic document generator. The UI lets the user verify results and correct exceptions. Routine authorized work does not require a separate approval at every step.
 
 Use the [five-stage workflow](references/five-stage-workflow.md) for collection, payment evidence, application packages, file handoff to the finance secretary, and financial review (财务审核), whose evidence comes from ARP. The home screen is one invoice-date-descending table with five workflow status columns and completion counts. Each status opens its evidence and record controls. Historical four-state conventions do not replace these stages.
 
@@ -42,6 +42,10 @@ Read `workspace.policies` before deciding which institutional rule applies. When
 The user has settled the rule: apply an explicit institutional clause when it covers this expense; otherwise follow successfully approved reimbursements of the same kind of GPT subscription. That precedent selects the Bank of China `中行折算价`; use the invoice date under the user's date instruction. Do not request extra finance confirmation or block a new application merely because the institution does not specify a category/date. Identify the basis as user-authorized approved precedent, never as invented institutional text. This settled choice does not itself establish actual payment or a final per-record claim amount. Read [the BOC evidence procedure](references/boc-invoice-date.md). Query the official historical table, preserve the actual screenshot and full source URL, and register it as `exchangeRate` evidence. Then use `exchangeRate.set` with the current record version. The quoted unit is 100 foreign-currency units; calculate CNY using exact decimal arithmetic and round only the final expense amount to cents. Do not silently choose another day when the official date has no result. If an applicable rule changes the required date/category, record the conflict and update the workflow/API support before recording that different choice; never mislabel another quote to satisfy the existing schema. A CAPTCHA or absent quote is an explicit collection gap, not a reason to invent a screenshot.
 
 An FX observation does not overwrite existing claimed/submitted/approved amounts. A new application must reconcile its claimed CNY with the invoice-day conversion. Records already in verified financial review or fully approved need no new FX lookup or rebuilt historical application under the earlier rule.
+
+## Backend automation
+
+See [AUTOMATION.md](../../AUTOMATION.md) for authenticated Agent HTTP operations. With the user-configured key, the server checks uploaded GPT invoices and payment evidence automatically, records agent findings, and retains original hashes. It does not approve finance, impersonate human verification, or collect websites. Use only genuine user-supplied purpose text/screenshots (OS dictation is text input); do not invent purpose, project names or missing facts. Generated packets stay drafts until the user checks their PDF in the client. Only the human session can configure keys or confirm a packet. ZIPs contain one integrated PDF per selected expense, with source changes invalidating old outputs. The editable Word note remains available separately.
 
 ## Prepare Word and PDF
 

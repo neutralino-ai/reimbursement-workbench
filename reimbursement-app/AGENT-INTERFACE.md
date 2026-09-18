@@ -83,7 +83,7 @@ UI 的 `POST /api/policies/upload` 接收 `{filename,contentBase64,title,version
 
 ## 随附 Skill
 
-入口是 [agent-tools/reimbursement-workflow/SKILL.md](agent-tools/reimbursement-workflow/SKILL.md)。它告诉 Codex 如何组合自己的浏览器、PDF、图片和 Word 能力与应用工具；不内置网页登录器、OCR 或办公软件。Skill 已随应用提供，未自动安装到用户全局技能目录；可以在对话中指定该文件使用，或按宿主支持的方式安装。
+入口是 [agent-tools/reimbursement-workflow/SKILL.md](agent-tools/reimbursement-workflow/SKILL.md)。它告诉 Codex 如何组合自己的浏览器、PDF、图片和 Word 能力与应用工具。应用不内置网页登录器；已上传材料可交后端 DeepSeek 核验及模板生成服务处理，见 [自动化 API](AUTOMATION.md)。Skill 已随应用提供，未自动安装到用户全局技能目录；可以在对话中指定该文件使用，或按宿主支持的方式安装。
 
 ## 本地备份与边界
 

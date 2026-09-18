@@ -28,7 +28,7 @@ function cellModel(record: RecordItem, id: WorkflowStepId, data: Workspace, sour
     return { done: true, title: id === 'approval' ? '已通过' : '已完成', detail: id === 'approval' ? `审核通过 ${cny(record.approvedCNY)}` : finance ? '财务审核已通过' : '已进入财务审核', ...(file ? { link: { material: file, label: id === 'claim' ? '申报整合 PDF' : '查看原件' } } : {}) };
   }
   if (id === 'materials') return invoices.length ? { done: sourceCurrent, title: sourceCurrent ? '已收集' : '待更新采集', detail: `${invoices.length} 份发票原件`, link: { material: invoices[0], label: '查看发票' } } : { done: false, title: '缺发票', detail: '原件尚未收集' };
-  if (id === 'payment') return payments.length ? { done: true, title: '凭证已收集', detail: record.paymentVerified ? '付款事实已核实' : '付款事实待核对', link: { material: payments[0], label: '查看付款凭证' } } : { done: false, title: '缺付款凭证', detail: '补充截图或 PDF' };
+  if (id === 'payment') return payments.length ? { done: true, title: '凭证已收集', detail: record.paymentVerified ? (record.aiReview?.status==='matched'?'AI 核验通过':'付款事实已核实') : record.aiReview?.status==='running'||record.aiReview?.status==='queued'?'AI 核验中':record.aiReview?.status==='mismatch'?'AI 发现字段不符':record.aiReview?.status==='failed'?'AI 核验失败，待处理':'付款事实待核对', link: { material: payments[0], label: '查看付款凭证' } } : { done: false, title: '缺付款凭证', detail: '补充截图或 PDF' };
   if (id === 'claim') {
     if (submissionPDF) return { done: true, title: '已备妥', detail: record.currency === 'CNY' ? '原件与情况说明完整' : '当日汇率已留证', link: { material: submissionPDF, label: '申报整合 PDF' } };
     const title = !payments.length || !invoices.length ? '材料未齐' : !exchange.valid ? '待补汇率截图' : '待整合申报材料';

@@ -6,7 +6,7 @@ React + TypeScript 界面与 Node.js 24 + SQLite API 分离。前端在本机运
 
 ## 功能与业务规则
 
-v0.2.0 新增桌面“检查更新”，从 GitHub Release 查询并打开当前平台安装包；另提供 [付款凭证预审本地试验](AI-PRECHECK.md)，使用 Responses 非流式图片识别，不会自动修改生产审核状态。
+v0.3.0 增加服务器自动核验、客户端 DeepSeek 密钥设置与连接测试、用途整理、中文 PDF/Word 生成，以及多份 PDF 打包 ZIP。使用步骤、运行依赖与版本保护见 [自动核验和申报材料](AUTOMATION.md)。桌面“检查更新”从 GitHub Release 获取当前平台新版。
 
 首页是一张按发票日期从新到旧排列的表格，上方显示各步骤完成数，每笔费用有五个状态列；点击状态可查看原件或维护该步骤。
 
@@ -28,7 +28,7 @@ v0.2.0 新增桌面“检查更新”，从 GitHub Release 查询并打开当前
 
 ## Agent 接口
 
-应用不内置大模型、OCR、网页登录或办公转换引擎。Agent 使用自己的浏览器、文档与图片处理能力收集材料和编写申请包，再通过 MCP/API/CLI 登记结果；用户通过界面核验和纠正。Agent 不能冒充用户完成人工核验。
+浏览器登录与网站采集由外部 Agent 完成。后端可调用用户配置的 DeepSeek 识别已上传材料并整理用途，由确定性的文档模板生成 PDF/Word；外部 Agent 仍可通过 MCP/API/CLI 导入和登记材料。用户通过界面核验和纠正，Agent 不能冒充用户完成人工核验。
 
 - MCP：`node server/mcp.mjs`
 - 查看工具：`node scripts/agent-cli.mjs --catalog`

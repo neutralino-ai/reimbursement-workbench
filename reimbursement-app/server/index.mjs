@@ -6,6 +6,7 @@ import {randomBytes,timingSafeEqual} from 'node:crypto';
 import {createStore} from './store.mjs';
 import {executeAgentCommand,getAgentCatalog} from './agent.mjs';
 import {createCloudAuth} from './cloud-auth.mjs';
+import {createAutomation} from './automation.mjs';
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mimeTypes = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon','.json':'application/json; charset=utf-8'};
@@ -63,6 +64,8 @@ export async function createApp(options = {}) {
     legacyDir,
   });
   const agentConfigPath = path.join(dataDir,'agent-access.json');
+  const automation=createAutomation({store,dataDir,...options.automation});
+  const workspace=()=>automation.decorate(store.workspace());
   if (!fs.existsSync(agentConfigPath)) fs.writeFileSync(agentConfigPath,JSON.stringify({version:1,token:randomBytes(32).toString('hex')},null,2),{flag:'wx',mode:0o600});
   const agentToken = JSON.parse(fs.readFileSync(agentConfigPath,'utf8')).token;
   if (typeof agentToken !== 'string' || !/^[a-f0-9]{64}$/.test(agentToken)) throw new Error('本地 Agent 密钥配置无效');
@@ -136,11 +139,20 @@ export async function createApp(options = {}) {
       }
       if (auth && route.startsWith('/api/') && !authenticatedAgent && !auth.status(req).authenticated) return json(res,401,{error:'请先登录'});
       if (route === '/api/agent/catalog' && req.method === 'GET') return json(res,200,{tools:getAgentCatalog()});
-      if (route === '/api/agent/workspace' && req.method === 'GET') return json(res,200,store.workspace());
+      if (route === '/api/agent/workspace' && req.method === 'GET') return json(res,200,workspace());
       if (route === '/api/agent/tasks' && req.method === 'GET') return json(res,200,store.agentTasks());
       if (route === '/api/agent/history' && req.method === 'GET') return json(res,200,store.history({limit:1000}));
       if (route === '/api/agent/commands' && req.method === 'POST') return json(res,200,executeAgentCommand(store,await body(req)));
-      if (route === '/api/workspace' && req.method === 'GET') return json(res,200,store.workspace());
+      if (route === '/api/workspace' && req.method === 'GET') return json(res,200,workspace());
+      const automationRoute=route.replace(/^\/api\/agent\//,'/api/');
+      if(automationRoute==='/api/automation'&&req.method==='GET')return json(res,200,automation.status());
+      if(automationRoute.startsWith('/api/automation/')&&req.method==='POST'){
+        const action=automationRoute.slice('/api/automation/'.length);
+        const methods={'settings':automation.saveSettings,'test':automation.testSettings,'review':automation.enqueueReview,'purpose':automation.savePurpose,'purpose-draft':automation.enqueuePurpose,'packet':automation.enqueuePacket,'approve-packet':automation.approvePacket,'zip':automation.enqueueZip};
+        if(!Object.hasOwn(methods,action))return json(res,404,{error:'自动化接口不存在'});
+        if(authenticatedAgent&&['settings','test','approve-packet'].includes(action))return json(res,403,{error:'此操作需用户在客户端完成'});
+        return json(res,200,await methods[action](await body(req,128*1024)));
+      }
       if (route === '/api/tasks' && req.method === 'GET') return json(res,200,store.agentTasks());
       if (route === '/api/policies/upload' && req.method === 'POST') {
         if (req.headers.authorization&&!isHumanSessionHeader) return json(res,403,{error:'Agent 请使用 material.import 和 policy.register 并保留 Agent 身份'});
@@ -205,12 +217,13 @@ export async function createApp(options = {}) {
     }
   });
   async function close() {
+    await automation.close();
     await new Promise(resolve=>server.close(resolve));
     if (vite) await vite.close();
     store.close();
     auth?.close();
   }
-  return {server,store,close,agentConfigPath};
+  return {server,store,automation,close,agentConfigPath};
 }
 
 if (process.argv[1] && fs.realpathSync(path.resolve(process.argv[1])) === fileURLToPath(import.meta.url)) {

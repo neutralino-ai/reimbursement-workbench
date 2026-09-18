@@ -18,7 +18,7 @@ const catalog = [
   command('workspace.get', 'Read the local reimbursement ledger, source evidence, versions, documents and verification states.', {}, [], { readOnly: true }),
   command('tasks.list', 'List missing evidence, incomplete workflow steps, human verification and month coverage gaps. Evidence-backed ARP financial review with an exact submission reference completes the first four steps, leaving only financial approval. Verified full approval completes all steps and assumes reimbursement arrival without bank/cash checks or changing original facts.', {}, [], { readOnly: true }),
   command('history.list', 'Read immutable version history. This is an export foundation; remote merge is not enabled.', { entityType: { enum: ['record', 'arp', 'material', 'allocation', 'document', 'source', 'delivery', 'policy'] }, entityID: str, limit: { type: 'integer', minimum: 1, maximum: 1000 } }, [], { readOnly: true }),
-  command('material.import', 'Preserve an original PDF/image/DOCX/CSV/XLSX/JSON with its SHA-256; optionally attach it to a record. baseVersion is required when attaching. Use statement only for an explicitly identified situation/explanation statement, not for a generic review report. exchangeRate identifies an original BOC webpage screenshot with browser provenance; tables/JSON/documents cannot substitute for it. policy requires a non-generated original PDF and is registered separately as a rule source.', { filename: str, role: { enum: ['invoice', 'payment', 'receipt', 'approval', 'observation', 'document', 'statement', 'exchangeRate', 'policy', 'other'] }, contentBase64: str, source, recordID: str }, ['filename', 'role', 'contentBase64', 'source']),
+  command('material.import', 'Preserve an original PDF/image/DOCX/CSV/XLSX/JSON with its SHA-256; optionally attach it to a record. baseVersion is required when attaching. Use statement only for an explicitly identified situation/explanation statement, not for a generic review report. exchangeRate identifies an original BOC webpage screenshot with browser provenance; tables/JSON/documents cannot substitute for it. policy requires a non-generated original PDF and is registered separately as a rule source.', { filename: str, role: { enum: ['invoice', 'payment', 'receipt', 'approval', 'observation', 'document', 'statement', 'exchangeRate', 'policy', 'purposeEvidence', 'other'] }, contentBase64: str, source, recordID: str }, ['filename', 'role', 'contentBase64', 'source']),
   command('policy.register', 'Register or update a rule source using an intact original policy PDF. Preserve exact quoted clauses, 1-based PDF pages, interpretation and applicability scope separately. Active is a selected authority, not automatic certification of an interpretation. Does not change existing reimbursement facts or exchange-rate selections. Use baseVersion new for a new policy.', policyFields, Object.keys(policyFields), { version: true }),
   command('invoice.upsert', 'Create or update an evidence-backed GPT invoice. Use baseVersion new for a new record, otherwise its current version. Never infer payment from an invoice.', { id: str, accountID: str, accountName: str, vendor: { const: 'chatgpt' }, invoiceNumber: str, date: str, billingMonth: str, amount: money, currency: { enum: ['USD', 'CNY', 'EUR', 'GBP', 'HKD'] }, plan: { type: 'string' }, notes: { type: 'string' }, evidenceIDs: evidence }, ['id', 'accountID', 'accountName', 'vendor', 'invoiceNumber', 'date', 'billingMonth', 'amount', 'currency', 'evidenceIDs'], { version: true }),
   command('record.patch', 'Patch only supplied payment/claim/submission fields using evidence and a reason. Agent assertions and human verification remain separate.', { recordID: str, paymentVerified: { type: 'boolean' }, claimConfirmed: { type: 'boolean' }, claimedCNY: { type: 'string' }, submissionReference: { type: 'string' }, submittedOn: { type: 'string' }, note: str, evidenceIDs: evidence }, ['recordID', 'note', 'evidenceIDs'], { version: true }),
@@ -200,13 +200,13 @@ export function createAgentSupport(ctx) {
   }
   function importRecordMaterial(recordID, payload) {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).some(key => !['filename', 'role', 'contentBase64', 'baseVersion', 'note'].includes(key))) fail('上传材料格式无效。');
-    if (!['invoice', 'payment'].includes(payload.role) || !clean(payload.filename) || typeof payload.contentBase64 !== 'string' || (payload.note !== undefined && typeof payload.note !== 'string')) fail('上传须提供发票或付款材料、文件名和Base64内容。');
+    if (!['invoice', 'payment', 'purposeEvidence'].includes(payload.role) || !clean(payload.filename) || typeof payload.contentBase64 !== 'string' || (payload.note !== undefined && typeof payload.note !== 'string')) fail('上传须提供发票、付款或用途材料、文件名和Base64内容。');
     if (!/\.(pdf|png|jpg|jpeg|webp|gif|heic)$/i.test(payload.filename)) fail('此上传入口仅支持图片与 PDF 原件。');
     return transaction(() => {
       recordRow(recordID);
       expectVersion('record', recordID, payload.baseVersion);
       const result = importMaterial({ filename: payload.filename, role: payload.role, contentBase64: payload.contentBase64, recordID, source: { kind: 'user-upload', capturedAt: currentTime(), note: clean(payload.note) || '用户通过本地工作台上传原始材料；尚未据此自动核验付款。' } }, { baseVersion: payload.baseVersion, actor: humanActor });
-      event('material_uploaded', `用户上传${payload.role === 'payment' ? '付款材料' : '发票'}：${result.filename}`, { recordID, materialID: result.id, actor: humanActor, note: clean(payload.note) });
+      event('material_uploaded', `用户上传${payload.role === 'payment' ? '付款材料' : payload.role==='purposeEvidence'?'用途材料':'发票'}：${result.filename}`, { recordID, materialID: result.id, actor: humanActor, note: clean(payload.note) });
       return result;
     });
   }
@@ -262,7 +262,7 @@ export function createAgentSupport(ctx) {
     const filename = p.filename.split(/[\\/]/).pop();
     if (!filename || filename.includes('\0')) fail('文件名无效。');
     const extension = path.extname(filename).toLowerCase();
-    if (!['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.heic', '.docx', '.csv', '.xlsx', '.json', '.txt'].includes(extension)) fail('材料格式不支持。');
+    if (!['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.heic', '.docx', '.csv', '.xlsx', '.json', '.txt', '.zip'].includes(extension)) fail('材料格式不支持。');
     if (p.contentBase64.length > Math.ceil(20 * 1024 * 1024 / 3) * 4) fail('材料不能超过 20 MB。', 413);
     if (p.contentBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(p.contentBase64)) fail('材料必须为有效 Base64。');
     const bytes = Buffer.from(p.contentBase64, 'base64');
