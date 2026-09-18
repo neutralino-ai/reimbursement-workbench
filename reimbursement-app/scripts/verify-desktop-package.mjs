@@ -12,7 +12,7 @@ const asar=await import(pathToFileURL(require.resolve('@electron/asar',{paths:[b
 const version=JSON.parse(fs.readFileSync(path.join(project,'package.json'),'utf8')).version;
 const output=path.resolve(project,'../output/desktop',version);
 const archive=path.join(output,'win-unpacked/resources/app.asar');
-const files=['desktop/main.cjs','desktop/preload.cjs','desktop/policy.cjs','dist/index.html','dist/frontend-config.json',...fs.readdirSync(path.join(project,'dist/assets')).map(name=>'dist/assets/'+name)];
+const files=['desktop/main.cjs','desktop/preload.cjs','desktop/policy.cjs','desktop/updates.cjs','dist/index.html','dist/frontend-config.json',...fs.readdirSync(path.join(project,'dist/assets')).map(name=>'dist/assets/'+name)];
 const approved=new Set([...files,'package.json']);
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const verified=[];

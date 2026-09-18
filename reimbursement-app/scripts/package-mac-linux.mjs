@@ -57,7 +57,7 @@ sourcePolicy.validateConnection(config);
 const assets=fs.readdirSync(path.join(source,'dist/assets'));
 assert.ok(assets.length>0);
 for(const name of assets)assert.match(name,/^[\w.-]+\.(?:js|css|svg|png|jpg|jpeg|webp|woff2?)$/);
-const sourceFiles=['desktop/main.cjs','desktop/preload.cjs','desktop/policy.cjs','dist/index.html','dist/frontend-config.json',...assets.map(name=>'dist/assets/'+name)];
+const sourceFiles=['desktop/main.cjs','desktop/preload.cjs','desktop/policy.cjs','desktop/updates.cjs','dist/index.html','dist/frontend-config.json',...assets.map(name=>'dist/assets/'+name)];
 
 fs.mkdirSync(work,{recursive:true,mode:0o700});
 assert.equal(fs.lstatSync(work).isSymbolicLink(),false);

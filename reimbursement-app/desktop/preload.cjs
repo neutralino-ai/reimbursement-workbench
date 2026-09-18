@@ -8,5 +8,8 @@ if (process.isMainFrame && location.protocol === 'reimbursement:' && location.ho
     version: 1,
     getConnection: () => ipcRenderer.invoke('reimbursement:connection:get'),
     saveConnection: value => ipcRenderer.invoke('reimbursement:connection:save', { apiBaseUrl: value?.apiBaseUrl }),
+    getVersion: () => ipcRenderer.invoke('reimbursement:updates:version'),
+    checkForUpdates: () => ipcRenderer.invoke('reimbursement:updates:check'),
+    openUpdate: () => ipcRenderer.invoke('reimbursement:updates:open'),
   }));
 }

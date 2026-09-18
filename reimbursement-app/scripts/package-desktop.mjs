@@ -19,7 +19,7 @@ const copy = (source, destination) => {
 
 // Build from an explicit allowlist in a fresh staging directory. The repository,
 // server, originals, local backups and Agent credentials are never packager input.
-const desktopFiles = ['main.cjs', 'preload.cjs', 'policy.cjs'];
+const desktopFiles = ['main.cjs', 'preload.cjs', 'policy.cjs', 'updates.cjs'];
 for (const filename of desktopFiles) copy(path.join(project, 'desktop', filename), path.join(stage, 'desktop', filename));
 for (const filename of ['index.html', 'frontend-config.json']) copy(path.join(project, 'dist', filename), path.join(stage, 'dist', filename));
 const config = JSON.parse(fs.readFileSync(path.join(stage, 'dist', 'frontend-config.json'), 'utf8'));

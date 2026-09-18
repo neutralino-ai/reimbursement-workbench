@@ -89,7 +89,7 @@ function inspectBundle(appDir, { packaged = false } = {}) {
   const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"?#]+)"/g)].map(match => match[1]);
   if (!assets.some(asset => asset.endsWith('.js'))) throw new Error('构建目录缺少 JavaScript 入口。');
   for (const asset of assets) if (staticResource(dist, APP_ORIGIN + asset, connection).status !== 200) throw new Error('构建资源不完整。');
-  for (const filename of ['main.cjs', 'preload.cjs', 'policy.cjs']) if (!fs.statSync(path.join(root, 'desktop', filename)).isFile()) throw new Error('桌面运行文件不完整。');
+  for (const filename of ['main.cjs', 'preload.cjs', 'policy.cjs', 'updates.cjs']) if (!fs.statSync(path.join(root, 'desktop', filename)).isFile()) throw new Error('桌面运行文件不完整。');
   if (packaged) {
     const allowed = new Set(['desktop', 'dist', 'package.json']);
     if (fs.readdirSync(root).some(name => !allowed.has(name))) throw new Error('安装包包含前端运行目录以外的文件。');

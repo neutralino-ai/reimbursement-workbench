@@ -44,7 +44,7 @@ test('desktop custom protocol exposes only built frontend assets and public dyna
   fs.writeFileSync(path.join(dist, 'assets', 'app.js'), 'export {};');
   fs.writeFileSync(path.join(dist, 'frontend-config.json'), JSON.stringify(connection));
   fs.writeFileSync(path.join(root, 'package.json'), '{}');
-  for (const filename of ['main.cjs', 'preload.cjs', 'policy.cjs']) fs.writeFileSync(path.join(root, 'desktop', filename), '');
+  for (const filename of ['main.cjs', 'preload.cjs', 'policy.cjs', 'updates.cjs']) fs.writeFileSync(path.join(root, 'desktop', filename), '');
   assert.equal(staticResource(dist, `${APP_ORIGIN}/`, connection).status, 200);
   assert.equal(staticResource(dist, `${APP_ORIGIN}/assets/app.js`, connection).status, 200);
   const changed = { apiBaseUrl: 'https://second.example.test/api-service' };
