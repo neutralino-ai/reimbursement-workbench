@@ -1,0 +1,45 @@
+.workflow-record-summary { display: flex; justify-content: space-between; gap: 12px; align-items: center; font-size: 13px; }
+.workflow-record-summary small { display: block; color: #697589; margin-top: 5px; font-size: 12px; }
+.workflow-record-summary strong { font-size: 19px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.record-step-nav { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); margin: 24px 0; border-bottom: 1px solid #e2e7ef; }
+.record-step-nav button { display: flex; flex-direction: column; align-items: center; gap: 7px; font-size: 12px; padding: 12px 2px 14px; border-bottom: 2px solid transparent; color: #697589; }
+.record-step-nav button>span { font-size: 12px; color: #8590a1; }
+.record-step-nav button small { display: none; }
+.record-step-nav .done>span { color: #278464; }
+.record-step-nav .attention>span { color: #a16a16; }
+.record-step-nav .active { border-bottom-color: #2859d6; color: #2859d6; background: #f5f8ff; }
+.workflow-step-intro>div { display: flex; gap: 12px; align-items: center; }
+.workflow-step-intro h3 { font-size: 17px; }
+.workflow-step-intro p { font-size: 13px; line-height: 1.7; color: #697589; margin-top: 10px; }
+.workflow-step-intro .workflow-step-detail { color: #44516a; }
+.workflow-step-state { order: 1; font-size: 12px; padding: 3px 7px; border-radius: 4px; background: #fff6e5; color: #956116; }
+.workflow-step-state.done { color: #278464; background: #edf7f1; }
+.workflow-evidence { margin: 22px 0; padding: 14px 0; border-top: 1px solid var(--line); }
+.workflow-evidence>summary { font-size: 14px; font-weight: 500; cursor: pointer; padding: 5px 0; }
+.workflow-evidence .material-item { margin-top: 10px; }
+.workflow-drawer-footer { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 20px 0; margin-top: 16px; border-top: 1px solid var(--line); font-size: 12px; color: #697589; }
+.workflow-drawer-footer>span { max-width: 65%; }
+.workflow-unsaved { border: 1px solid #e9d5af; background: #fff8eb; border-radius: 6px; padding: 16px; margin: 14px 0; font-size: 13px; }
+.workflow-unsaved p { margin: 8px 0; line-height: 1.7; color: #826b42; }
+.workflow-unsaved>div { display: flex; gap: 9px; }
+.workflow-unsaved:focus { outline: 2px solid #b88931; outline-offset: 3px; }
+.workflow-form-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.workflow-form-fields>.text-button { margin: 5px 0 20px; }
+.application-checklist { display: grid; gap: 0; margin-top: 12px; }
+.application-source-row { display: grid; grid-template-columns: 90px minmax(0,1fr); gap: 12px; padding: 13px 0; border-bottom: 1px solid #edf0f5; font-size: 13px; align-items: start; }
+.application-source-row>strong { font-size: 13px; font-weight: 500; color: #697589; padding-top: 3px; }
+.application-source-row a { display: block; padding: 3px 0; color: #2859d6; overflow-wrap: anywhere; }
+.application-source-row small { display: block; color: #697589; font-size: 12px; line-height: 1.7; margin-top: 5px; }
+.application-source-row .missing { color: #956116; }
+.fx-panel { margin-top: 20px; padding: 18px; border: 1px solid #dee6f2; border-radius: 7px; background: #f8faff; }
+.fx-panel h3 { font-size: 15px; }
+.fx-summary { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin: 15px 0; }
+.fx-summary dt { font-size: 12px; color: #697589; }
+.fx-summary dd { font-size: 14px; color: #182333; margin: 6px 0 0; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.fx-evidence-image { display: block; width: 100%; max-height: 280px; object-fit: contain; object-position: top; margin-top: 14px; background: white; border: 1px solid #e0e6ef; border-radius: 4px; }
+.fx-formula { padding: 12px 0; font-size: 14px; font-variant-numeric: tabular-nums; border-top: 1px solid #dee6f2; }
+.application-pdf { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 20px; padding: 16px; background: #edf3ff; border: 1px solid #cfddfa; border-radius: 6px; color: #2859d6; font-size: 14px; }
+.application-pdf small { display: block; color: #637999; margin-top: 5px; font-size: 12px; }
+.application-missing { padding: 14px 16px; margin-top: 20px; background: #fafbfe; border: 1px dashed #cbd5e5; border-radius: 6px; color: #697589; font-size: 13px; line-height: 1.7; }
+@media(max-width:480px) { .record-step-nav button { font-size: 11px; } .workflow-record-summary { font-size: 12px; } .workflow-record-summary strong { font-size: 17px; } .workflow-drawer-footer { align-items: flex-start; } .application-source-row { grid-template-columns: 76px minmax(0,1fr); } }
+.drawer-section.application-section { border-top: 0; margin-top: 14px; padding-top: 0; }

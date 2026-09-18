@@ -1,0 +1,38 @@
+{
+  "name": "reimbursement-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "node scripts/frontend-server.mjs",
+    "start": "node scripts/frontend-server.mjs",
+    "backend": "node server/index.mjs",
+    "mcp": "node server/mcp.mjs",
+    "agent": "node scripts/agent-cli.mjs",
+    "build": "vite build --base=/",
+    "typecheck": "tsc --noEmit",
+    "desktop:dev": "pnpm build && electron desktop/main.cjs",
+    "desktop:win": "pnpm build && node scripts/package-desktop.mjs --win",
+    "desktop:mac": "pnpm build && node scripts/package-desktop.mjs --mac --arm64",
+    "desktop:mac:intel": "pnpm build && node scripts/package-desktop.mjs --mac",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "ajv": "8.17.1",
+    "csv-parse": "^6.1.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "electron": "44.4.1",
+    "electron-builder": "26.15.3",
+    "typescript": "7.0.2",
+    "vite": "8.3.0"
+  }
+}

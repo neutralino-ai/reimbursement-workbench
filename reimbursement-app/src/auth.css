@@ -1,0 +1,24 @@
+.auth-page { min-height:100vh; display:grid; place-items:center; padding:24px; background:#f4f6fa; }
+.auth-card { width:min(100%,400px); background:#fff; padding:32px; border:1px solid var(--line); border-radius:12px; box-shadow:0 12px 40px #18233308; }
+.auth-mark { display:grid; place-items:center; width:42px; height:44px; margin-bottom:24px; background:#e8eefc; color:#2859d6; border:1px solid #d8e2f8; border-radius:7px; font-weight:600; }
+.auth-card h1 { font-size:24px; letter-spacing:0; }
+.auth-card>p { font-size:13px; color:var(--muted); line-height:1.8; margin-top:12px; }
+.auth-card footer { border-top:1px solid var(--line); margin-top:26px; padding-top:18px; font-size:11px; line-height:1.8; color:var(--muted); }
+.cloud-session { max-width:1500px; margin:0 auto; padding:14px 28px 0; display:flex; justify-content:flex-end; gap:16px; font-size:12px; color:var(--muted); }
+.cloud-session button { color:#2859d6; padding:0; }
+.cloud-session>span:first-child { max-width:50vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.auth-card footer>span { display:block; }
+.auth-api-address { overflow-wrap:anywhere; }
+.connection-link,.setup-change { padding:0; color:#2859d6; font-size:12px; }
+.connection-link { margin-top:12px; }
+.setup-change { margin:0 0 18px; }
+.connection-dialog { width:min(480px,calc(100vw - 32px)); max-height:calc(100vh - 32px); border:1px solid var(--line); border-radius:12px; padding:28px; color:var(--ink,#182333); background:#fff; box-shadow:0 20px 80px #18233320; }
+.connection-dialog::backdrop { background:#18233352; }
+.connection-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.connection-heading h2 { margin:0; font-size:20px; font-weight:600; }
+.connection-close { flex:none; padding:0 4px; font-size:24px; line-height:1; color:var(--muted); }
+.connection-dialog p { margin-top:14px; font-size:13px; line-height:1.8; color:var(--muted); }
+.connection-dialog .connection-note { font-size:12px; }
+.connection-dialog .feedback.error { color:#b54732; }
+.connection-actions { margin-top:24px; display:flex; justify-content:flex-end; gap:10px; }
+@media(max-width:600px) { .cloud-session { padding:12px 16px 0; gap:12px; } .cloud-session>span:first-child { max-width:40vw; } .connection-dialog { padding:22px; } }

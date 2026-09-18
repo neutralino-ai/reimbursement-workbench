@@ -1,0 +1,13 @@
+/var/log/reimbursement-api/*.log {
+    weekly
+    rotate 4
+    compress
+    missingok
+    notifempty
+    sharedscripts
+    postrotate
+        if /bin/systemctl is-active --quiet reimbursement-api; then
+            /bin/systemctl kill --kill-who=main --signal=USR1 reimbursement-api
+        fi
+    endscript
+}

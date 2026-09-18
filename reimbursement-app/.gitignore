@@ -1,0 +1,8 @@
+node_modules/
+.pnpm-store/
+dist/
+data/
+*.log
+client-private/
+client-connection.json
+desktop-build/
