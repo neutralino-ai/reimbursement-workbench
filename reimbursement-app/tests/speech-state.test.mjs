@@ -29,5 +29,6 @@ test('mobile export names keep Unicode extensions and cannot escape the preview 
  assert.equal(mobileFilename('C:\\temp\\用途.docx'),'用途.docx');
  assert.equal(mobileFilename('..\u0000材料.zip'),'材料.zip');
  const shortened=mobileFilename('用途'.repeat(200)+'.pdf');
- assert.ok(Buffer.byteLength(shortened)<=220);assert.ok(shortened.endsWith('.pdf'));
+  assert.ok(Buffer.byteLength(shortened)<=220);assert.ok(shortened.endsWith('.pdf'));
+  assert.ok(Buffer.byteLength(mobileFilename('x.'+'a'.repeat(300)))<=220,'An oversized extension must not prevent truncation from terminating');
 });

@@ -17,7 +17,8 @@ export function appendDictation(original:string,transcript:string) {
 export function mobileFilename(value:string) {
   // Keep a useful extension and Unicode names, but never a path or hidden filename.
   const name=value.split(/[\\/]/).at(-1)?.replace(/[\u0000-\u001f\u007f]/g,'').replace(/^\.+/,'')||'附件.pdf';
-  const ext=name.includes('.')?name.slice(name.lastIndexOf('.')):'';
+  const dot=name.lastIndexOf('.');
+  const ext=dot>=0&&name.length-dot<=12?name.slice(dot):'';
   let base=ext?name.slice(0,-ext.length):name;
   while(new TextEncoder().encode(base+ext).length>220)base=Array.from(base).slice(0,-1).join('');
   return base+ext;
