@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {apiAddress,clearSession} from './api';
-import {desktopBridge,validateDesktopAPI} from './desktop';
+import {validateDesktopAPI} from './desktop';
+import {connectionBridge} from './mobile';
 
 export default function ConnectionSettings({onClose}:{onClose:()=>void}) {
   const dialog=useRef<HTMLDialogElement>(null);
@@ -11,14 +12,14 @@ export default function ConnectionSettings({onClose}:{onClose:()=>void}) {
   useEffect(()=>{
     dialog.current?.showModal();
     let active=true;
-    if(!apiAddress())void desktopBridge()?.getConnection().then(config=>{if(active)setAddress(config.apiBaseUrl);}).catch(()=>{if(active)setError('无法读取已保存的地址，请重新填写。');}).finally(()=>{if(active)setLoading(false);});
+    if(!apiAddress())void connectionBridge()?.getConnection().then(config=>{if(active)setAddress(config.apiBaseUrl);}).catch(()=>{if(active)setError('无法读取已保存的地址，请重新填写。');}).finally(()=>{if(active)setLoading(false);});
     return ()=>{active=false;};
   },[]);
   async function save(event:FormEvent) {
     event.preventDefault();setError('');setBusy(true);
     try {
-      const bridge=desktopBridge();
-      if(!bridge)throw new Error('请在桌面应用中修改服务器地址。');
+      const bridge=connectionBridge();
+      if(!bridge)throw new Error('请在桌面或 iOS 应用中修改服务器地址。');
       await bridge.saveConnection({apiBaseUrl:validateDesktopAPI(address)});
       clearSession();
       window.location.reload();

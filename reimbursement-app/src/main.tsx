@@ -8,3 +8,5 @@ import './shell.css';
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><AuthGate><App /></AuthGate></React.StrictMode>,
 );
+
+import './mobile.css';

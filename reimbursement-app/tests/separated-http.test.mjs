@@ -7,7 +7,7 @@ import http from 'node:http';
 import {createApp} from '../server/index.mjs';
 import {issueSetup} from '../server/cloud-auth.mjs';
 
-for(const origin of ['http://127.0.0.1:4317','reimbursement://app'])test(`separate frontend ${origin} uses allowlisted CORS and human sessions for data, downloads and mutations`,async()=>{
+for(const origin of ['http://127.0.0.1:4317','reimbursement://app','capacitor://localhost'])test(`separate frontend ${origin} uses allowlisted CORS and human sessions for data, downloads and mutations`,async()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'reimbursement-separated-'));
  const publicOrigin='https://api.example.test';
  const app=await createApp({dataDir:dir,publicUrl:publicOrigin+'/reimbursement',frontendOrigins:[origin]});
@@ -21,7 +21,7 @@ for(const origin of ['http://127.0.0.1:4317','reimbursement://app'])test(`separa
   const preflight=await request('/api/auth/login',{origin,'sec-fetch-site':'cross-site','access-control-request-method':'POST','access-control-request-headers':'authorization,content-type'},undefined,'OPTIONS');
   assert.equal(preflight.status,204);assert.equal(preflight.headers['access-control-allow-origin'],origin);
   assert.equal(preflight.headers['access-control-allow-credentials'],undefined,'No third-party cookies');
-  for(const evil of ['null','https://evil.test','http://127.0.0.1:9999','reimbursement://evil','reimbursement://app.evil','reimbursement://app:444',...(origin==='reimbursement://app'?[]:['reimbursement://app'])]){
+  for(const evil of ['null','https://evil.test','http://127.0.0.1:9999','reimbursement://evil','reimbursement://app.evil','reimbursement://app:444','capacitor://evil','capacitor://localhost:444',...(origin==='capacitor://localhost'?[]:['capacitor://localhost']),...(origin==='reimbursement://app'?[]:['reimbursement://app'])]){
    const result=await request('/api/workspace',{origin:evil});assert.equal(result.status,403);assert.equal(result.headers['access-control-allow-origin'],undefined);
    const deniedPreflight=await request('/api/auth/login',{origin:evil,'access-control-request-method':'POST','access-control-request-headers':'authorization,content-type'},undefined,'OPTIONS');assert.equal(deniedPreflight.status,403);assert.equal(deniedPreflight.headers['access-control-allow-origin'],undefined);
   }
@@ -64,5 +64,5 @@ for(const origin of ['http://127.0.0.1:4317','reimbursement://app'])test(`separa
 });
 
 test('frontend origin configuration rejects wildcard, opaque, public HTTP and noncanonical desktop origins',async()=>{
- for(const origin of ['*','null','http://remote.example','https://good.example/path','https://good.example/','file://','reimbursement://evil','reimbursement://app/','reimbursement://app:444','reimbursement://user@app','reimbursement://app?query','other://app'])await assert.rejects(createApp({publicUrl:'https://api.example/reimbursement',frontendOrigins:[origin]}));
+ for(const origin of ['*','null','http://remote.example','https://good.example/path','https://good.example/','file://','reimbursement://evil','reimbursement://app/','reimbursement://app:444','reimbursement://user@app','reimbursement://app?query','other://app','capacitor://evil','capacitor://localhost/','capacitor://localhost:444','capacitor://user@localhost','capacitor://localhost?query'])await assert.rejects(createApp({publicUrl:'https://api.example/reimbursement',frontendOrigins:[origin]}));
 });

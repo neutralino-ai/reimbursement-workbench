@@ -18,9 +18,15 @@
     "desktop:win": "pnpm build && node scripts/package-desktop.mjs --win",
     "desktop:mac": "pnpm build && node scripts/package-desktop.mjs --mac --arm64",
     "desktop:mac:intel": "pnpm build && node scripts/package-desktop.mjs --mac",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "ios:sync": "pnpm build && cap sync ios && node scripts/verify-ios.mjs",
+    "ios:open": "cap open ios",
+    "ios:check": "node scripts/verify-ios.mjs",
+    "ios:build": "node scripts/build-ios.mjs"
   },
   "dependencies": {
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
     "@modelcontextprotocol/sdk": "1.30.0",
     "ajv": "8.17.1",
     "csv-parse": "^6.1.0",
@@ -28,6 +34,7 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "electron": "44.4.1",

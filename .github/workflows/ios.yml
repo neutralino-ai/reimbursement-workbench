@@ -1,0 +1,36 @@
+name: iOS client
+on:
+  push:
+    branches: [main, 'codex/ios-*']
+    paths: ['reimbursement-app/**', '.github/workflows/ios.yml']
+  pull_request:
+    paths: ['reimbursement-app/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: reimbursement-app
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pnpm
+        run: npm install -g pnpm@11.19.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - name: Client state and API separation tests
+        run: node --test tests/speech-state.test.mjs tests/separated-http.test.mjs
+      - run: pnpm ios:sync
+      - name: Unsigned iOS Simulator build
+        run: pnpm ios:build

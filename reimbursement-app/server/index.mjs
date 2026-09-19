@@ -16,10 +16,10 @@ function frontendOrigins(values) {
   return new Set(values.map(value=>{
     // Electron registers this exact standard, secure origin. It is opt-in and
     // must not expand the allowlist to opaque or arbitrary custom schemes.
-    if(value==='reimbursement://app')return value;
+    if(value==='reimbursement://app'||value==='capacitor://localhost')return value;
     const parsed=new URL(value);
     const local=['localhost','127.0.0.1','[::1]'].includes(parsed.hostname);
-    if((parsed.protocol!=='https:'&&!(parsed.protocol==='http:'&&local))||parsed.origin!==value||parsed.username||parsed.password)throw new Error('前端来源必须为完整 HTTPS Origin、本机 HTTP Origin 或 reimbursement://app，不允许通配符。');
+    if((parsed.protocol!=='https:'&&!(parsed.protocol==='http:'&&local))||parsed.origin!==value||parsed.username||parsed.password)throw new Error('前端来源必须为完整 HTTPS Origin、本机 HTTP Origin 或 reimbursement://app / capacitor://localhost，不允许通配符。');
     return parsed.origin;
   }));
 }

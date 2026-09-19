@@ -2,6 +2,8 @@
 
 React + TypeScript 界面与 Node.js 24 + SQLite API 分离。前端在本机运行，通过 HTTPS 直接访问远程台账，可作为静态网页或打包为 Electron Windows/macOS 应用。
 
+iOS 使用 Capacitor 复用同一前端，增加本机语音听写、PDF 系统预览与 ZIP/Word“存储到文件”。Mac 上的 Xcode 配置和真机测试步骤见 [iOS 客户端](IOS.md)。
+
 客户端只包含界面和桌面运行环境，不启动本地业务后端、打开业务数据库或代理 API。远程后端保存原件、事实、来源、版本和核验记录。当前业务流程面向 GPT/Codex 订阅，其他供应商可后续扩展。
 
 ## 功能与业务规则

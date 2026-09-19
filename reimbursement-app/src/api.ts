@@ -1,4 +1,5 @@
-import {desktopBridge,validateDesktopAPI} from './desktop';
+import {validateDesktopAPI} from './desktop';
+import {connectionBridge} from './mobile';
 
 export const appBase = import.meta.env.BASE_URL.replace(/\/$/, '');
 let endpoint: URL | undefined;
@@ -17,7 +18,7 @@ export function configureAPI(value:string) {
 export async function loadFrontendConfig() {
   if(endpoint)return;
   if(!configuration)configuration=(async()=>{
-    const desktop=desktopBridge();
+    const desktop=connectionBridge();
     if(desktop){
       const config=await desktop.getConnection();
       configureAPI(validateDesktopAPI(config.apiBaseUrl));

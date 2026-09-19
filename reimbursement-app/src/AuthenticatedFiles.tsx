@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState, type AnchorHTMLAttributes, type ImgHTMLAttributes, type MouseEvent} from 'react';
 import {apiFetch} from './api';
+import {isIOS,presentMobileFile} from './mobile';
 
 type FileLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href' | 'download' | 'onClick' | 'target' | 'rel'> & {
   href: string;
@@ -64,7 +65,7 @@ export function AuthenticatedFileLink({href, filename, download, children, ...pr
     let popup: Window | null = null;
     let objectURL: string | undefined;
     try {
-      if (!isDownload) {
+      if (!isDownload && !isIOS()) {
         // Open during the click, then sever the opener before any file is loaded.
         // Passing the noopener window feature would discard the navigation handle.
         popup = window.open('about:blank', '_blank');
@@ -79,6 +80,11 @@ export function AuthenticatedFileLink({href, filename, download, children, ...pr
       const response = await apiFetch(path, {signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)])});
       const blob = await checkedBlob(response);
       if (controller.signal.aborted || !active.current) return;
+      if (isIOS()) {
+        const nativeName = typeof download === 'string' && download || filename || responseFilename(response) || (blob.type === 'application/pdf' ? '附件.pdf' : '附件');
+        await presentMobileFile(blob, nativeName, isDownload);
+        return;
+      }
       objectURL = URL.createObjectURL(blob);
       // Never navigate to a potentially executable HTML or SVG attachment on the app origin.
       const previewable = /^(application\/pdf|image\/(png|jpe?g|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon))$/i.test(blob.type.split(';')[0].trim());
