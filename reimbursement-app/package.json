@@ -19,7 +19,7 @@
     "desktop:mac": "pnpm build && node scripts/package-desktop.mjs --mac --arm64",
     "desktop:mac:intel": "pnpm build && node scripts/package-desktop.mjs --mac",
     "test": "node --test tests/*.test.mjs",
-    "ios:sync": "pnpm build && cap sync ios && node scripts/verify-ios.mjs",
+    "ios:sync": "pnpm build && cap sync ios && node scripts/prepare-ios.mjs && node scripts/verify-ios.mjs",
     "ios:open": "cap open ios",
     "ios:check": "node scripts/verify-ios.mjs",
     "ios:build": "node scripts/build-ios.mjs"
