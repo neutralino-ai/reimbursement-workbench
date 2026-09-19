@@ -10,7 +10,7 @@
 
 ```sh
 git fetch origin
-git switch codex/ios-voice-input
+git switch main
 git pull --ff-only
 cd reimbursement-app
 pnpm install --frozen-lockfile
