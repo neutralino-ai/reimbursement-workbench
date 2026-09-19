@@ -1,0 +1,4 @@
+# We package Windows as a portable executable, not a Squirrel installer.
+# Its optional install hook must not block clean Mac/iOS installations.
+allowBuilds:
+  electron-winstaller: false
