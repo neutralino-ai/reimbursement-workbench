@@ -9,7 +9,8 @@
 在仓库根目录运行：
 
 ```sh
-git switch main
+git fetch origin
+git switch codex/ios-voice-input
 git pull --ff-only
 cd reimbursement-app
 pnpm install --frozen-lockfile
@@ -73,3 +74,5 @@ Node 测试覆盖原生来源的预检/登录/原件下载/写入/注销、非�
 - 退出登录后读取原件失败；改服务器后不能沿用旧服务器会话。
 
 Apple 账号签名、iPhone 权限、系统语言资源和麦克风识别效果仍需在自己的 Mac/iPhone 上完成验收。
+
+2026-09-19：Windows 本地 113 项测试及手机视口的模拟语音交互检查通过；[Xcode 模拟器编译通过](https://github.com/neutralino-ai/reimbursement-workbench/actions/runs/35416256056)。交互检查使用模拟原生接口，不代表 iPhone 实际录音质量。正式 API 已加入上述 iOS 来源，并验证预检 204、匿名数据请求 401、非法来源 403。
