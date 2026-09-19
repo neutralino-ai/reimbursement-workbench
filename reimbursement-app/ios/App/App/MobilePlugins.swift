@@ -31,7 +31,7 @@ public class MobileSettingsPlugin: CAPPlugin, CAPBridgedPlugin {
 public class ReimbursementFilesPlugin: CAPPlugin, CAPBridgedPlugin, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
     public let identifier = "ReimbursementFilesPlugin"
     public let jsName = "ReimbursementFiles"
-    public let pluginMethods = [CAPPluginMethod(name: "present", returnType: CAPPluginReturnPromise)]
+    public let pluginMethods: [CAPPluginMethod] = [CAPPluginMethod(name: "present", returnType: CAPPluginReturnPromise)]
     private var activeCall: CAPPluginCall?
     private var file: URL?
     private var directory: URL?
