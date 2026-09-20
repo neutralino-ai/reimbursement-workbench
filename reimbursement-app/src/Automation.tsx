@@ -7,7 +7,7 @@ import './automation.css';
 import SpeechInput from './SpeechInput';
 import {appendDictation} from './speech-state';
 
-export type Job={id:string;kind:string;recordID?:string;batchID?:string;recordIDs?:string[];status:string;createdAt:string;finishedAt?:string;error?:string;current?:boolean;result?:{reasons?:string[];documentID?:string;pdfMaterialID?:string;docxMaterialID?:string;materialID?:string;approved?:boolean;pages?:number;invoiceCheck?:{checks:{field:string;result:string}[]};paymentCheck?:{checks:{field:string;result:string}[]}}};
+export type Job={id:string;kind:string;recordID?:string;batchID?:string;recordIDs?:string[];sourceBatchVersion?:string;status:string;createdAt:string;finishedAt?:string;error?:string;current?:boolean;result?:{purpose?:string;missing?:string[];reasons?:string[];documentID?:string;pdfMaterialID?:string;docxMaterialID?:string;materialID?:string;approved?:boolean;pages?:number;invoiceCheck?:{checks:{field:string;result:string}[]};paymentCheck?:{checks:{field:string;result:string}[]}}};
 type Purpose={version:string;text:string;sourceMaterialIDs:string[];draft:string;missing:string[];confirmedText?:string};
 type AutomationState={settings:{configured:boolean;enabled:boolean;keyHint:string;model:string;revision:string;lastTest?:{ok:boolean;at:string}|null};jobs:Job[];purposes:Record<string,Purpose>};
 const labels:Record<string,string>={queued:'排队中',running:'处理中',matched:'核验通过',mismatch:'字段不符',needs_review:'需人工核对',failed:'处理失败',interrupted:'任务已中断',stale:'内容已变化',completed:'已生成'};
