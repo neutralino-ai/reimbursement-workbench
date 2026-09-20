@@ -68,6 +68,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cd release-assets
-          sha256sum Reimbursement-* > SHA256SUMS
+          node reimbursement-app/scripts/collect-release.mjs release-assets publish-assets
+          cd publish-assets
           gh release create "$GITHUB_REF_NAME" Reimbursement-* SHA256SUMS --repo "$GITHUB_REPOSITORY" --verify-tag --title "Reimbursement Workbench $GITHUB_REF_NAME" --notes-file "../docs/releases/$GITHUB_REF_NAME.md" --latest

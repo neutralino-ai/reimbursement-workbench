@@ -1,0 +1,38 @@
+name: Publish verified v0.3.1 artifacts
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/recover-v031-release.yml']
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+concurrency:
+  group: release-v0.3.1
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify artifact provenance and successful platform jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/$GITHUB_REPOSITORY/actions/runs/35490072438 | jq -e '.head_sha == "af6635b4ce26e102a0ce2302bce0b590080e38ad" and .path == ".github/workflows/release.yml"'
+          gh api repos/$GITHUB_REPOSITORY/actions/runs/35490072438/jobs | jq -e '[.jobs[] | select(.name | startswith("build ("))] | length == 3 and all(.conclusion == "success")'
+          git fetch origin tag v0.3.1
+          test "$(git rev-parse 'v0.3.1^{commit}')" = af6635b4ce26e102a0ce2302bce0b590080e38ad
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 35490072438
+          github-token: ${{ github.token }}
+          path: release-assets
+          merge-multiple: true
+      - name: Publish the previously verified binaries without rebuilding or retagging
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node reimbursement-app/scripts/collect-release.mjs release-assets publish-assets
+          cd publish-assets
+          gh release create v0.3.1 Reimbursement-* SHA256SUMS --repo "$GITHUB_REPOSITORY" --verify-tag --title 'Reimbursement Workbench v0.3.1' --notes-file ../docs/releases/v0.3.1.md --latest
