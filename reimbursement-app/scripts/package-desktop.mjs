@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { build, Platform, Arch } from 'electron-builder';
 
@@ -8,7 +9,10 @@ const manifest = JSON.parse(fs.readFileSync(path.join(project, 'package.json'), 
 const args = process.argv.slice(2);
 const target = args.includes('--mac') ? 'mac' : 'win';
 const arch = args.includes('--arm64') ? Arch.arm64 : Arch.x64;
-const stage = path.join(project, 'desktop-build', `stage-${Date.now()}`);
+// Keep the staging directory outside the pnpm workspace. Otherwise
+// electron-builder can discover the repository's node_modules and copy them
+// into the desktop asar even though the client has no runtime dependencies.
+const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'reimbursement-desktop-stage-'));
 const output = path.resolve(project, '..', 'output', 'desktop', manifest.version);
 const copy = (source, destination) => {
   const stat = fs.lstatSync(source);
@@ -50,7 +54,7 @@ const artifacts = await build({
     artifactName: 'Reimbursement-${version}-${os}-${arch}.${ext}',
     win: { icon: path.join(project, 'desktop', 'assets', 'icon.ico'), signExecutable: false },
     portable: { requestExecutionLevel: 'user', unicode: true },
-    mac: { icon: path.join(project, 'desktop', 'assets', 'icon.icns'), category: 'public.app-category.finance', identity: null },
+    mac: { icon: path.join(project, 'desktop', 'assets', 'icon.icns'), category: 'public.app-category.finance', identity: '-' },
   },
 });
 console.log(JSON.stringify({ artifacts, stagedFiles: desktopFiles.length, dataBundled: false }));

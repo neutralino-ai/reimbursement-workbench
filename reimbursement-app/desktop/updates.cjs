@@ -13,7 +13,8 @@ function releaseInfo(release,currentVersion,platform,arch){
   const filename=os&&['x64','arm64'].includes(arch)?`Reimbursement-${version}-${os}-${arch}.${os==='win'?'exe':'zip'}`:null;
   const expected=filename?`https://github.com/${REPOSITORY}/releases/download/${encodeURIComponent(release.tag_name)}/${encodeURIComponent(filename)}`:null;
   const asset=(release.assets||[]).find(a=>a.name===filename&&a.state==='uploaded'&&a.size>0&&a.browser_download_url===expected);
-  return {status:newer(version,currentVersion)?'available':'current',currentVersion,latestVersion:version,releaseUrl,downloadUrl:asset?expected:null,assetName:asset?filename:null,publishedAt:release.published_at||null,notes:typeof release.body==='string'?release.body.slice(0,6000):''};
+  const status=newer(version,currentVersion)?'available':newer(currentVersion,version)?'ahead':'current';
+  return {status,currentVersion,latestVersion:version,releaseUrl,downloadUrl:asset?expected:null,assetName:asset?filename:null,publishedAt:release.published_at||null,notes:typeof release.body==='string'?release.body.slice(0,6000):''};
 }
 async function checkForUpdates({currentVersion,platform=process.platform,arch=process.arch,fetchImpl=fetch}){
   let response;

@@ -9,9 +9,6 @@
   "scripts": {
     "dev": "node scripts/frontend-server.mjs",
     "start": "node scripts/frontend-server.mjs",
-    "backend": "node server/index.mjs",
-    "mcp": "node server/mcp.mjs",
-    "agent": "node scripts/agent-cli.mjs",
     "build": "vite build --base=/",
     "typecheck": "tsc --noEmit",
     "desktop:dev": "pnpm build && electron desktop/main.cjs",
@@ -27,9 +24,6 @@
   "dependencies": {
     "@capacitor/core": "8.5.2",
     "@capacitor/ios": "8.5.2",
-    "@modelcontextprotocol/sdk": "1.30.0",
-    "ajv": "8.17.1",
-    "csv-parse": "^6.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

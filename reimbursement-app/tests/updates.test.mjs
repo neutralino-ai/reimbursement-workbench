@@ -11,6 +11,7 @@ test('update ordering compares numeric versions and ignores non-stable versions'
 test('only exact project and platform assets become update download links',()=>{
  const update=releaseInfo(release,'0.1.0','win32','x64');assert.equal(update.status,'available');assert.equal(update.assetName,release.assets[0].name);
  assert.equal(releaseInfo(release,'0.2.0','win32','x64').status,'current');
+ assert.equal(releaseInfo(release,'0.2.1','win32','x64').status,'ahead');
  assert.equal(releaseInfo(release,'0.1.0','darwin','arm64').downloadUrl,null);
  assert.throws(()=>releaseInfo({...release,html_url:'https://evil.test/download'},'0.1.0','win32','x64'));
  assert.equal(releaseInfo({...release,assets:[{...release.assets[0],browser_download_url:'https://evil.test/installer.exe'}]},'0.1.0','win32','x64').downloadUrl,null);

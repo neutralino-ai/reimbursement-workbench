@@ -58,7 +58,7 @@ pnpm desktop:mac:intel
 
 客户端需要可连接且证书有效的 HTTPS API。服务端应启用云端鉴权，并显式允许 Origin `reimbursement://app`。如还使用独立浏览器前端，应额外登记其精确 Origin。`webSecurity`、沙盒和上下文隔离保持启用，不放行 `null` Origin，也不关闭证书校验。
 
-API 基址通过公开的 `public/frontend-config.json` 字段 `apiBaseUrl` 提供默认值；该文件不含凭据。管理员应自行验证部署环境的 TLS、入站端口、API 鉴权、CORS 和证书续期。接口说明见 [Agent 接口](AGENT-INTERFACE.md) 和 [HTTP API](server/AGENT-API.md)。
+API 基址通过公开的 `public/frontend-config.json` 字段 `apiBaseUrl` 提供默认值；该文件不含凭据。管理员应自行验证部署环境的 TLS、入站端口、API 鉴权、CORS 和证书续期。服务端接口与部署文档位于配套的私有 `reimbursement-workbench-server` 仓库。
 
 ## 验证范围
 

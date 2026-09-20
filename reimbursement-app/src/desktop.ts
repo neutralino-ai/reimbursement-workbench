@@ -1,5 +1,5 @@
 export type DesktopConnection = {apiBaseUrl:string};
-export type UpdateResult = {status:'available'|'current'|'unavailable';currentVersion:string;latestVersion?:string;releaseUrl:string;downloadUrl?:string|null;assetName?:string|null;publishedAt?:string|null;checkedAt?:string;notes?:string;message?:string};
+export type UpdateResult = {status:'available'|'current'|'ahead'|'unavailable';currentVersion:string;latestVersion?:string;releaseUrl:string;downloadUrl?:string|null;assetName?:string|null;publishedAt?:string|null;checkedAt?:string;notes?:string;message?:string};
 export type DesktopBridge = {
   version:1;
   getConnection:()=>Promise<DesktopConnection>;

@@ -20,6 +20,7 @@ export default function UpdateCheck(){
     <p>当前版本：{version?`v${version}`:'读取中'}</p>
     <div aria-live="polite">{busy&&<p>正在查询 GitHub Release…</p>}{error&&<p className="feedback error" role="alert">{error}</p>}
       {result?.status==='current'&&<p>当前已是最新版本。最新正式版：v{result.latestVersion}</p>}
+      {result?.status==='ahead'&&<p>本机版本 v{result.currentVersion} 高于公开正式版 v{result.latestVersion}。这通常是尚未发布的本地构建，不会自动降级或覆盖。</p>}
       {result?.status==='unavailable'&&<p>{result.message}</p>}
       {result?.status==='available'&&<><p className="update-found">发现新版本 v{result.latestVersion}</p>{result.publishedAt&&<p>发布时间：{new Date(result.publishedAt).toLocaleDateString()}</p>}{result.notes&&<pre className="update-notes">{result.notes}</pre>}<p>{result.downloadUrl?'点击下载后，在浏览器保存安装包，再退出当前客户端并打开新版。':'这个版本尚无当前系统的安装包，可前往 Release 查看。'}</p></>}
     </div>
