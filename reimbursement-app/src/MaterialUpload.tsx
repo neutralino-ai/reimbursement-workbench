@@ -1,18 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
-import {AuthenticatedFileLink} from './AuthenticatedFiles';
+import AttachmentPreview from './AttachmentPreview';
 import type { Material, RecordItem, Workspace } from './types';
 
 type PendingFile = {id:string; file:File};
-function PendingPreview({file}: {file:File}) {
-  const [url,setURL]=useState('');
-  useEffect(()=>{
-    if(!/^image\/(png|jpeg|webp|gif)$/.test(file.type))return;
-    const value=URL.createObjectURL(file);setURL(value);
-    return ()=>URL.revokeObjectURL(value);
-  },[file]);
-  return url?<img className="material-pending-preview" src={url} alt={file.name+' 上传前预览'}/>:null;
-}
 
 export default function MaterialUpload({record,role,onReload,onBusy,onPending,disabled=false}: {
   record:RecordItem;
@@ -83,13 +74,13 @@ export default function MaterialUpload({record,role,onReload,onBusy,onPending,di
   return <div className="material-upload">
     <input className="sr-only" ref={input} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.heic" aria-label={'选择'+label} onChange={event=>choose(event.target.files)} disabled={busy||disabled}/>
     <button type="button" className="button secondary" disabled={busy||disabled||!record.version} onClick={()=>input.current?.click()}>选择{label}</button>
-    <p>选择文件后可移除选错的图片，点击“提交上传”才会保存。</p>
+    <p>点击缩略图或文件名可预览。选择后可移除，点击“提交上传”才会保存。</p>
     {pending.length>0&&<div className="material-pending-list" aria-label="待上传附件">
-      {pending.map(item=><div className="material-pending" key={item.id}><PendingPreview file={item.file}/><span title={item.file.name}>{item.file.name}</span><button type="button" className="text-button danger-text" aria-label={'移除待上传的 '+item.file.name} disabled={busy} onClick={()=>setPending(previous=>previous.filter(file=>file.id!==item.id))}>移除</button></div>)}
+      {pending.map(item=><div className="material-pending" key={item.id}><AttachmentPreview file={item.file}/><button type="button" className="text-button danger-text" aria-label={'移除待上传的 '+item.file.name} disabled={busy} onClick={()=>setPending(previous=>previous.filter(file=>file.id!==item.id))}>移除</button></div>)}
       <div className="material-upload-actions"><button type="button" className="text-button" disabled={busy} onClick={()=>setPending([])}>取消上传</button><button type="button" className="button primary small" disabled={busy||disabled||!record.version} onClick={()=>void upload()}>{busy?'上传中…':'提交上传（'+pending.length+'）'}</button></div>
     </div>}
     {existing.length>0&&<div className="material-upload-list"><small>已上传附件：</small>{existing.map(material=><div key={material.id}>
-      <div className="material-upload-item"><AuthenticatedFileLink href={material.href} filename={material.filename}>{material.filename}</AuthenticatedFileLink><button type="button" className="text-button danger-text" aria-label={'删除 '+material.filename} disabled={busy||disabled||!record.version} onClick={()=>setConfirmID(material.id)}>删除</button></div>
+      <div className="material-upload-item"><AttachmentPreview href={material.href} filename={material.filename}/><button type="button" className="text-button danger-text" aria-label={'删除 '+material.filename} disabled={busy||disabled||!record.version} onClick={()=>setConfirmID(material.id)}>删除</button></div>
       {confirmID===material.id&&<div className="inline-confirm"><span>删除“{material.filename}”？已生成的相关草稿需重新生成。</span><button type="button" className="text-button" disabled={busy} onClick={()=>setConfirmID('')}>取消</button><button type="button" className="button danger small" disabled={busy||disabled} onClick={()=>void remove(material)}>确认删除</button></div>}
     </div>)}</div>}
     {error&&<p className="feedback error" role="alert">{error}</p>}

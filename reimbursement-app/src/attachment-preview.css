@@ -1,0 +1,25 @@
+.attachment-preview-trigger { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; border: 0; padding: 4px; border-radius: 6px; background: transparent; color: inherit; text-align: left; cursor: zoom-in; }
+.attachment-preview-trigger:hover { background: #eaf0fb; }
+.attachment-preview-trigger:focus-visible { outline: 2px solid #285ad1; outline-offset: 2px; }
+.attachment-thumbnail,.attachment-file-icon { width: 76px; height: 76px; flex-shrink: 0; border-radius: 5px; object-fit: contain; background: #edf1f7; }
+.attachment-file-icon { display: grid; place-items: center; color: #415b87; font-size: 14px; font-weight: 700; }
+.attachment-preview-label { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.attachment-preview-label>span { overflow-wrap: anywhere; white-space: normal; }
+.attachment-preview-label>small { color: #285ad1; font-size: 12px; }
+.attachment-preview-dialog { box-sizing: border-box; width: min(1120px, 96vw); max-width: none; height: min(860px, 92dvh); max-height: 92dvh; padding: 0; border: 1px solid #d5dfed; border-radius: 12px; color: #182333; background: white; box-shadow: 0 24px 90px #101c3540; }
+.attachment-preview-dialog[open] { display: flex; flex-direction: column; }
+.attachment-preview-dialog::backdrop { background: #101c35a6; }
+.attachment-preview-dialog>header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; border-bottom: 1px solid #e3e8f1; }
+.attachment-preview-dialog>header>div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.attachment-preview-dialog>header span { overflow-wrap: anywhere; font-size: 13px; color: #65758b; }
+.attachment-preview-dialog>header>button { flex-shrink: 0; }
+.attachment-preview-tools { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; padding: 10px; border-bottom: 1px solid #e3e8f1; }
+.attachment-preview-tools output { min-width: 78px; text-align: center; font-size: 13px; }
+.attachment-preview-viewport { flex: 1; min-height: 0; overflow: auto; background: #e9edf3; overscroll-behavior: contain; }
+.attachment-preview-viewport>img { display: block; max-width: none; max-height: none; margin: auto; }
+.attachment-preview-viewport.is-fit { display: flex; align-items: center; justify-content: center; }
+.attachment-preview-viewport.is-fit>img { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; }
+.attachment-preview-fallback { margin: auto; padding: 32px; text-align: center; }
+.attachment-preview-fallback p { line-height: 1.7; }
+.attachment-preview-dialog>footer { padding: 10px 20px; color: #65758b; font-size: 12px; border-top: 1px solid #e3e8f1; }
+@media (max-width:600px) { .attachment-thumbnail,.attachment-file-icon { width: 64px; height: 64px; } .attachment-preview-dialog>header { padding: 12px; } .attachment-preview-tools { gap: 8px; } .attachment-preview-dialog>footer { padding: 10px 12px; } }
