@@ -20,6 +20,17 @@ const application = (changes = {}) => ({
 const context = (changes = {}) => ({ documents: [], materials: [fxMaterial()], deliveryItems: [], ...changes });
 const byId = (input, ctx) => Object.fromEntries(getRecordWorkflow(input, ctx).map(step => [step.id, step]));
 
+test('ready combined package delivers one PDF across both records without inventing handover', () => {
+  const records=[readyRecord(),readyRecord({id:'gpt-feb'})];
+  const doc=application({batchID:'batch',recordIDs:records.map(r=>r.id)});
+  const ctx=context({documents:[doc]});
+  const files=deliveryFiles(records,ctx);
+  assert.equal(files.length,1);assert.equal(files[0].material.id,doc.submissionPDFMaterialID);
+  assert.deepEqual(files[0].recordIDs,records.map(r=>r.id));assert.equal(files[0].status,'unknown');
+  assert.equal(byId(records[0],ctx).submission.state,'todo');
+  assert.equal(deliveryFiles(records,context({documents:[{...doc,stale:true}]})).length,2);
+});
+
 test('financial review completes the first four stages while full approval closes the fifth', () => {
   const input = record({ materials: [], financeReviewPending: true, submissionReference: 'ARP-REVIEW', status: 'submitted' });
   const before = structuredClone(input);

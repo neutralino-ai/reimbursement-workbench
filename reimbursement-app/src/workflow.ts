@@ -80,9 +80,11 @@ export function sourceFreshness(source: Source | undefined, days = 7, now = Date
 export function deliveryFiles(records: RecordItem[], context?: WorkflowContext): DeliveryFile[] {
   const files = new Map<string, DeliveryFile>();
   for (const record of records) {
+    const applications = applicationDocuments(record, context);
+    const combined = applications.filter(document => document.batchID);
     const candidates = [
-      ...(record.materials || []).filter(material => ['invoice', 'payment'].includes(material.role) || material.role === 'statement' && !/\.docx$/i.test(material.filename)),
-      ...applicationDocuments(record, context).flatMap(document => document.materials.filter(material => material.id === document.submissionPDFMaterialID)),
+      ...(!combined.length ? (record.materials || []).filter(material => ['invoice', 'payment'].includes(material.role) || material.role === 'statement' && !/\.docx$/i.test(material.filename)) : []),
+      ...(combined.length ? combined : applications).flatMap(document => document.materials.filter(material => material.id === document.submissionPDFMaterialID)),
     ];
     for (const material of candidates) {
       const stored = context?.deliveryItems?.find(item => item.recordID === record.id && item.materialID === material.id);

@@ -7,14 +7,14 @@ import './automation.css';
 import SpeechInput from './SpeechInput';
 import {appendDictation} from './speech-state';
 
-type Job={id:string;kind:string;recordID?:string;status:string;createdAt:string;finishedAt?:string;error?:string;current?:boolean;result?:{reasons?:string[];documentID?:string;pdfMaterialID?:string;docxMaterialID?:string;materialID?:string;approved?:boolean;pages?:number;invoiceCheck?:{checks:{field:string;result:string}[]};paymentCheck?:{checks:{field:string;result:string}[]}}};
+export type Job={id:string;kind:string;recordID?:string;batchID?:string;recordIDs?:string[];status:string;createdAt:string;finishedAt?:string;error?:string;current?:boolean;result?:{reasons?:string[];documentID?:string;pdfMaterialID?:string;docxMaterialID?:string;materialID?:string;approved?:boolean;pages?:number;invoiceCheck?:{checks:{field:string;result:string}[]};paymentCheck?:{checks:{field:string;result:string}[]}}};
 type Purpose={version:string;text:string;sourceMaterialIDs:string[];draft:string;missing:string[];confirmedText?:string};
 type AutomationState={settings:{configured:boolean;enabled:boolean;keyHint:string;model:string;revision:string;lastTest?:{ok:boolean;at:string}|null};jobs:Job[];purposes:Record<string,Purpose>};
 const labels:Record<string,string>={queued:'排队中',running:'处理中',matched:'核验通过',mismatch:'字段不符',needs_review:'需人工核对',failed:'处理失败',interrupted:'任务已中断',stale:'内容已变化',completed:'已生成'};
 const fieldLabels:Record<string,string>={merchant:'商户',invoiceNumber:'发票编号',date:'日期',amount:'原币金额',currency:'币种',status:'结算状态',duplicate:'重复凭证'};
 const post=<T,>(action:string,data:object)=>api<T>('/api/automation/'+action,{method:'POST',body:JSON.stringify({...data,operationId:crypto.randomUUID()})});
 const fileHref=(id:string)=>'/api/materials/'+encodeURIComponent(id);
-function useAutomation(){
+export function useAutomation(){
   const [state,setState]=useState<AutomationState|null>(null),[error,setError]=useState('');
   async function refresh(){try{const data=await api<AutomationState>('/api/automation');setState(data);setError('');return data;}catch(e){setError(e instanceof Error?e.message:'无法读取自动化状态');return null;}}
   useEffect(()=>{let alive=true,inFlight=false;const poll=async()=>{if(inFlight)return;inFlight=true;try{const data=await api<AutomationState>('/api/automation');if(alive){setState(data);setError('');}}catch(e){if(alive)setError(e instanceof Error?e.message:'读取失败');}finally{inFlight=false;}};void poll();const timer=setInterval(()=>void poll(),3000);return()=>{alive=false;clearInterval(timer);};},[]);
@@ -44,19 +44,21 @@ function ZipPanel({data,onReload}:{data:Workspace;onReload:()=>Promise<Workspace
 export function AIRecordPanel({record,mode,onReload,onDirty,onBusy}:{record:RecordItem;mode:'review'|'purpose';onReload:()=>Promise<Workspace>;onDirty:(value:boolean)=>void;onBusy:(value:boolean)=>void}){
   const {state,error:loadError,refresh}=useAutomation();const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const [invoiceID,setInvoiceID]=useState(''),[paymentID,setPaymentID]=useState('');
-  const [text,setText]=useState(''),[draft,setDraft]=useState(''),[dirty,setDirty]=useState(false),[seedVersion,setSeedVersion]=useState('');
+  const [text,setText]=useState(''),[draft,setDraft]=useState(''),[baseline,setBaseline]=useState({text:'',draft:''}),[seedVersion,setSeedVersion]=useState('');
+  const dirty=text!==baseline.text||draft!==baseline.draft;
   const [speechActive,setSpeechActive]=useState(false),[speechPending,setSpeechPending]=useState(false),[uploadBusy,setUploadBusy]=useState(false),[uploadPending,setUploadPending]=useState(false);
   const blocked=busy||speechActive||speechPending||uploadBusy||uploadPending;
   useEffect(()=>onBusy(busy||speechActive||uploadBusy),[busy,speechActive,uploadBusy,onBusy]);
   useEffect(()=>onDirty(dirty||speechPending||uploadPending),[dirty,speechPending,uploadPending,onDirty]);
+  useEffect(()=>()=>onDirty(false),[onDirty]);
   const purpose=state?.purposes[record.id];
   const jobs=state?.jobs.filter(j=>j.recordID===record.id)||[];const review=jobs.find(j=>j.kind==='review'),packet=jobs.find(j=>j.kind==='packet'),purposeJob=jobs.find(j=>j.kind==='purpose');
   const seen=useRef(new Set<string>()),initialJobs=useRef(false),reload=useRef(onReload);reload.current=onReload;
   useEffect(()=>{if(!state)return;for(const j of jobs){if(!['queued','running'].includes(j.status)){const key=j.id+j.status;if(initialJobs.current&&!seen.current.has(key))void reload.current().catch(()=>{});seen.current.add(key);}}initialJobs.current=true;},[state]);
-  useEffect(()=>{if(purpose&&purpose.version!==seedVersion&&!dirty&&!speechPending){setText(purpose.text);setDraft(purpose.confirmedText||purpose.draft||purpose.text);setSeedVersion(purpose.version);}},[purpose,seedVersion,dirty,speechPending]);
-  const edit=(fn:()=>void)=>{fn();setDirty(true);};
+  useEffect(()=>{if(purpose&&purpose.version!==seedVersion&&!dirty&&!speechPending){const next={text:purpose.text,draft:purpose.confirmedText||purpose.draft||purpose.text};setText(next.text);setDraft(next.draft);setBaseline(next);setSeedVersion(purpose.version);}},[purpose,seedVersion,dirty,speechPending]);
+  const edit=(fn:()=>void)=>{fn();};
   async function run(action:()=>Promise<unknown>){setBusy(true);setError('');try{await action();await refresh();await onReload();}catch(e){setError(e instanceof Error?e.message:'操作失败');}finally{setBusy(false);}}
-  async function save(){const result=await post<Purpose>('purpose',{recordID:record.id,recordVersion:record.version,baseVersion:purpose?.version||'new',text,sourceMaterialIDs:record.materials.filter(m=>m.role==='purposeEvidence'&&m.integrity==='ok').map(m=>m.id)});setDirty(false);return result;}
+  async function save(){const attachments=record.materials.filter(m=>m.role==='purposeEvidence'&&m.integrity==='ok').map(m=>m.id);if(purpose&&text===purpose.text&&JSON.stringify(attachments)===JSON.stringify(purpose.sourceMaterialIDs))return purpose;const result=await post<Purpose>('purpose',{recordID:record.id,recordVersion:record.version,baseVersion:purpose?.version||'new',text,sourceMaterialIDs:attachments});const nextDraft=result.confirmedText||result.draft||result.text;setText(result.text);if(draft===baseline.draft)setDraft(nextDraft);setBaseline({text:result.text,draft:nextDraft});setSeedVersion(result.version);return result;}
   const generating=[purposeJob,packet].some(j=>j&&['queued','running'].includes(j.status));
   const amount=record.currency==='CNY'?record.amount:record.exchangeRate?.valid?record.exchangeRate.cnyAmount:null;
   if(record.priorStepsComplete||record.financeReviewPending||record.status==='completed')return null;
@@ -74,7 +76,7 @@ export function AIRecordPanel({record,mode,onReload,onDirty,onBusy}:{record:Reco
       {purpose?.missing?.length? <div className="ai-missing">{purpose.missing.map((m,i)=><p key={i}>{m}</p>)}</div>:null}
       <label htmlFor="purpose-final">提交 PDF 中的用途说明</label><textarea id="purpose-final" aria-label="提交 PDF 中的用途说明" rows={5} value={draft} onChange={e=>edit(()=>setDraft(e.target.value))} placeholder="AI 整理后可在此修改，也可以直接填写最终说明。"/>
       <p>本笔申报金额：<strong>{amount?`CNY ${amount}`:'待补发票日汇率'}</strong></p>
-      <button className="button primary" disabled={blocked||generating||!draft.trim()||!amount||!record.paymentVerified} onClick={()=>void run(async()=>{let current=purpose;const attachments=record.materials.filter(m=>m.role==='purposeEvidence'&&m.integrity==='ok').map(m=>m.id);if(!current||text!==current.text||JSON.stringify(attachments)!==JSON.stringify(current.sourceMaterialIDs))current=await save();const latest=await onReload();const updated=latest.records.find(r=>r.id===record.id)!;await post('packet',{recordID:record.id,baseVersion:updated.version,purposeVersion:current.version,purpose:draft,claimedCNY:amount,confirmed:true});setDirty(false);})}>确认用途及金额，生成 PDF 草稿</button>
+      <button className="button primary" disabled={blocked||generating||!draft.trim()||!amount||!record.paymentVerified} onClick={()=>void run(async()=>{let current=purpose;const attachments=record.materials.filter(m=>m.role==='purposeEvidence'&&m.integrity==='ok').map(m=>m.id);if(!current||text!==current.text||JSON.stringify(attachments)!==JSON.stringify(current.sourceMaterialIDs))current=await save();const latest=await onReload();const updated=latest.records.find(r=>r.id===record.id)!;await post('packet',{recordID:record.id,baseVersion:updated.version,purposeVersion:current.version,purpose:draft,claimedCNY:amount,confirmed:true});setBaseline({text,draft});})}>确认用途及金额，生成 PDF 草稿</button>
       {!record.paymentVerified&&<p className="form-hint">需先完成发票与实付款核验。</p>}
       {packet&&<div className="ai-job"><strong>申报材料：{labels[packet.status]}</strong>{packet.error&&<p className="feedback error">{packet.error}</p>}{packet.result?.pdfMaterialID&&<><div className="ai-actions"><AuthenticatedFileLink className="button secondary" href={fileHref(packet.result.pdfMaterialID)}>查看完整 PDF（{packet.result.pages} 页）</AuthenticatedFileLink>{packet.result.docxMaterialID&&<AuthenticatedFileLink className="text-button" href={fileHref(packet.result.docxMaterialID)} download>下载说明 Word</AuthenticatedFileLink>}</div><p className="small-muted">请检查用途、金额及全部附件。确认后可在主页面将多笔 PDF 打包为 ZIP。</p>{packet.status==='stale'?<p>内容已变化，请重新生成；上方文件仅供查看历史。</p>:packet.result.approved?<p>已确认材料备妥。</p>:<button className="button primary" disabled={busy} onClick={()=>void run(async()=>{await post('approve-packet',{jobID:packet.id,confirmed:true});})}>我已检查 PDF，标记材料备妥</button>}</>}</div>}
     </>}{(error||loadError)&&<p className="feedback error" role="alert">{error||loadError}</p>}
