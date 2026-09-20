@@ -54,7 +54,7 @@ const artifacts = await build({
     artifactName: 'Reimbursement-${version}-${os}-${arch}.${ext}',
     win: { icon: path.join(project, 'desktop', 'assets', 'icon.ico'), signExecutable: false },
     portable: { requestExecutionLevel: 'user', unicode: true },
-    mac: { icon: path.join(project, 'desktop', 'assets', 'icon.icns'), category: 'public.app-category.finance', identity: '-' },
+    mac: { icon: path.join(project, 'desktop', 'assets', 'icon.icns'), category: 'public.app-category.finance', identity: '-', notarize: false },
   },
 });
 console.log(JSON.stringify({ artifacts, stagedFiles: desktopFiles.length, dataBundled: false }));

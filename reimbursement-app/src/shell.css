@@ -24,6 +24,10 @@
 .material-pending span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .material-pending>div { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .material-upload-list { margin-top: 14px; }
+.material-pending-preview { width: 56px; height: 56px; object-fit: contain; flex-shrink: 0; border-radius: 4px; background: #edf1f7; }
+.material-upload-actions { display: flex; justify-content: flex-end; align-items: center; gap: 14px; margin-top: 12px; }
+.material-upload-item>a { min-width: 0; overflow-wrap: anywhere; }
+.material-upload-item>button,.material-pending>button { flex-shrink: 0; }
 .material-upload-list>small { display: block; margin-bottom: 5px; color: #697589; }
 .material-upload-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid #e7edf6; font-size: 13px; }
 .material-upload-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

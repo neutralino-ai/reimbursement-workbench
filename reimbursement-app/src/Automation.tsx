@@ -45,10 +45,10 @@ export function AIRecordPanel({record,mode,onReload,onDirty,onBusy}:{record:Reco
   const {state,error:loadError,refresh}=useAutomation();const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const [invoiceID,setInvoiceID]=useState(''),[paymentID,setPaymentID]=useState('');
   const [text,setText]=useState(''),[draft,setDraft]=useState(''),[dirty,setDirty]=useState(false),[seedVersion,setSeedVersion]=useState('');
-  const [speechActive,setSpeechActive]=useState(false),[speechPending,setSpeechPending]=useState(false),[uploadBusy,setUploadBusy]=useState(false);
-  const blocked=busy||speechActive||speechPending||uploadBusy;
+  const [speechActive,setSpeechActive]=useState(false),[speechPending,setSpeechPending]=useState(false),[uploadBusy,setUploadBusy]=useState(false),[uploadPending,setUploadPending]=useState(false);
+  const blocked=busy||speechActive||speechPending||uploadBusy||uploadPending;
   useEffect(()=>onBusy(busy||speechActive||uploadBusy),[busy,speechActive,uploadBusy,onBusy]);
-  useEffect(()=>onDirty(dirty||speechPending),[dirty,speechPending,onDirty]);
+  useEffect(()=>onDirty(dirty||speechPending||uploadPending),[dirty,speechPending,uploadPending,onDirty]);
   const purpose=state?.purposes[record.id];
   const jobs=state?.jobs.filter(j=>j.recordID===record.id)||[];const review=jobs.find(j=>j.kind==='review'),packet=jobs.find(j=>j.kind==='packet'),purposeJob=jobs.find(j=>j.kind==='purpose');
   const seen=useRef(new Set<string>()),initialJobs=useRef(false),reload=useRef(onReload);reload.current=onReload;
@@ -68,8 +68,7 @@ export function AIRecordPanel({record,mode,onReload,onDirty,onBusy}:{record:Reco
       <button className="button secondary" disabled={busy||!state?.settings.enabled||['queued','running'].includes(review?.status||'')} onClick={()=>void run(async()=>{await post('review',{recordID:record.id,baseVersion:record.version,materialIDs:[invoiceID||record.materials.find(m=>m.role==='invoice'&&m.integrity==='ok')?.id,paymentID||record.materials.find(m=>m.role==='payment'&&m.integrity==='ok')?.id].filter(Boolean)});})}>重新核验</button><p className="small-muted">核验结论保留 Agent 身份，不代替人工确认或财务审核。</p>
     </>:<>
       <label htmlFor="purpose-source">用途原文</label><textarea id="purpose-source" aria-label="用途原文" rows={4} value={text} onChange={e=>edit(()=>setText(e.target.value))} placeholder="用于什么科研或工作？用 ChatGPT 完成了哪些具体工作？"/><SpeechInput disabled={busy||generating||uploadBusy} onAdopt={transcript=>edit(()=>setText(previous=>appendDictation(previous,transcript)))} onActivity={setSpeechActive} onPending={setSpeechPending}/>
-      <MaterialUpload record={record} role="purposeEvidence" onReload={onReload} onBusy={setUploadBusy}/>
-      {record.materials.filter(m=>m.role==='purposeEvidence').map(m=><AuthenticatedFileLink key={m.id} className="text-button" href={m.href}>{m.filename}</AuthenticatedFileLink>)}
+      <MaterialUpload record={record} role="purposeEvidence" onReload={async()=>{const next=await onReload();await refresh();return next;}} onBusy={setUploadBusy} onPending={setUploadPending} disabled={busy||speechActive||speechPending}/>
       <div className="ai-actions"><button className="button secondary" disabled={blocked||generating} onClick={()=>void run(async()=>{await save();})}>保存用途</button><button className="button secondary" disabled={blocked||generating||!state?.settings.configured} onClick={()=>void run(async()=>{const saved=await save();await post('purpose-draft',{recordID:record.id,purposeVersion:saved.version});})}>DeepSeek 整理说明</button></div>
       {purposeJob&&<p className="small-muted">用途整理：{labels[purposeJob.status]}{purposeJob.error&&` · ${purposeJob.error}`}</p>}
       {purpose?.missing?.length? <div className="ai-missing">{purpose.missing.map((m,i)=><p key={i}>{m}</p>)}</div>:null}
