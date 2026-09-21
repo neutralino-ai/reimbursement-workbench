@@ -16,15 +16,12 @@ jobs:
           - runner: macos-26
             target: mac-arm64
             args: --mac --arm64
-            extension: zip
           - runner: macos-15-intel
             target: mac-x64
             args: --mac
-            extension: zip
           - runner: windows-2022
             target: win-x64
             args: --win
-            extension: exe
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     defaults:
@@ -51,7 +48,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
-          path: output/desktop/*/Reimbursement-*-${{ matrix.target }}.${{ matrix.extension }}
+          path: |
+            output/desktop/*/Reimbursement-*-${{ matrix.target }}.exe
+            output/desktop/*/Reimbursement-*-${{ matrix.target }}.dmg
+            output/desktop/*/Reimbursement-*-${{ matrix.target }}.zip
           if-no-files-found: error
   publish:
     needs: build

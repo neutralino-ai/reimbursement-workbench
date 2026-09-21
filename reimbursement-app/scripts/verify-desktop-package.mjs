@@ -35,6 +35,7 @@ for(const item of asar.listPackage(archive)) {
 }
 assert.equal(verified.length,approved.size);
 const artifact=path.join(output,`Reimbursement-${version}-${mac?'mac':'win'}-${arch}.${mac?'zip':'exe'}`);
+if(mac)assert.ok(fs.statSync(path.join(output,`Reimbursement-${version}-mac-${arch}.dmg`)).size>1_000_000,'Mac DMG missing or empty');
 const audit={platform:mac?'darwin':'win32',arch,version,artifact,bytes:fs.statSync(artifact).size,sha256:sha(fs.readFileSync(artifact)),verifiedFiles:verified,financialDataIncluded:false,backendIncluded:false};
 fs.writeFileSync(path.join(output,`${mac?'mac':'windows'}-${arch}-build-audit.json`),JSON.stringify(audit,null,2)+'\n');
 console.log(JSON.stringify({verifiedFiles:verified.length,bytes:audit.bytes,sha256:audit.sha256,financialDataIncluded:false,backendIncluded:false}));

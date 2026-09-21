@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, shell } = require('electron');
 const { APP_URL, validateConnection, isAppDocument, isAppBlob, externalHTTPS, contentSecurityPolicy, bundledConnection, staticResource, inspectBundle } = require('./policy.cjs');
-const {checkForUpdates} = require('./updates.cjs');
+const {UpdateClient} = require('./updates.cjs');
 
 app.setName('报销工作台');
 app.enableSandbox();
@@ -15,8 +15,7 @@ const distDir = path.join(appDir, 'dist');
 let mainWindow;
 let connection;
 let desktopSession;
-let checkedUpdate;
-let checkingUpdate;
+let updater;
 const clientVersion = require('../package.json').version;
 
 // This check does not create a window, inspect private data or contact the API.
@@ -41,6 +40,7 @@ if (process.argv.includes('--verify-package')) {
     });
     app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
     app.on('activate', () => { if (desktopSession && !mainWindow) createWindow(); });
+    app.on('before-quit', () => updater?.stop());
   }
 }
 
@@ -104,15 +104,13 @@ async function start() {
   ipcMain.handle('reimbursement:connection:get', event => { verifySender(event); return { ...connection }; });
   ipcMain.handle('reimbursement:connection:save', (event, value) => { verifySender(event); return saveConnection(value); });
   ipcMain.handle('reimbursement:updates:version', event => {verifySender(event);return clientVersion;});
-  ipcMain.handle('reimbursement:updates:check', async event => {
-    verifySender(event);
-    if(!checkingUpdate)checkingUpdate=checkForUpdates({currentVersion:clientVersion}).then(result=>{checkedUpdate=result;return result;}).finally(()=>{checkingUpdate=null;});
-    return checkingUpdate;
-  });
+  updater=new UpdateClient({currentVersion:clientVersion,directory:path.join(app.getPath('userData'),'updates'),opener:filename=>shell.openPath(filename)});
+  for(const [channel,action] of Object.entries({info:'info',check:'check',download:'download',install:'install',cancel:'cancel'})){
+    ipcMain.handle('reimbursement:updates:'+channel,event=>{verifySender(event);return updater[action]();});
+  }
   ipcMain.handle('reimbursement:updates:open', async event => {
     verifySender(event);
-    if(!checkedUpdate||checkedUpdate.status!=='available')throw new Error('请先检查是否有新版本');
-    await shell.openExternal(checkedUpdate.downloadUrl||checkedUpdate.releaseUrl);
+    await shell.openExternal(updater.info().releaseUrl);
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ label: app.name, submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { type: 'separator' }, { role: 'quit' }] }] : []),

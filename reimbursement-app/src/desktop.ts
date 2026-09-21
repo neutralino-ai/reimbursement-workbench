@@ -1,11 +1,15 @@
 export type DesktopConnection = {apiBaseUrl:string};
-export type UpdateResult = {status:'available'|'current'|'ahead'|'unavailable';currentVersion:string;latestVersion?:string;releaseUrl:string;downloadUrl?:string|null;assetName?:string|null;publishedAt?:string|null;checkedAt?:string;notes?:string;message?:string};
+export type UpdateInfo = {state:'idle'|'checking'|'available'|'current'|'ahead'|'unavailable'|'downloading'|'verifying'|'ready'|'opening'|'opened'|'cancelled'|'error';currentVersion:string;latestVersion?:string;platform:string;arch:string;busy:boolean;revision:number;downloaded:number;total:number;canDownload:boolean;canInstall:boolean;releaseUrl:string;publishedAt?:string|null;checkedAt?:string;notes?:string;message?:string;error?:string};
 export type DesktopBridge = {
   version:1;
   getConnection:()=>Promise<DesktopConnection>;
   saveConnection:(connection:DesktopConnection)=>Promise<DesktopConnection>;
   getVersion?:()=>Promise<string>;
-  checkForUpdates?:()=>Promise<UpdateResult>;
+  checkForUpdates?:()=>Promise<UpdateInfo>;
+  getUpdateInfo?:()=>Promise<UpdateInfo>;
+  downloadUpdate?:()=>Promise<UpdateInfo>;
+  installUpdate?:()=>Promise<UpdateInfo>;
+  cancelUpdate?:()=>Promise<UpdateInfo>;
   openUpdate?:()=>Promise<void>;
 };
 

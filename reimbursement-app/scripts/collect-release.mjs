@@ -3,7 +3,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 const version=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url))).version;
 const source=path.resolve(process.argv[2]),destination=path.resolve(process.argv[3]);
-const names=[`Reimbursement-${version}-mac-arm64.zip`,`Reimbursement-${version}-mac-x64.zip`,`Reimbursement-${version}-win-x64.exe`];
+const names=[`Reimbursement-${version}-mac-arm64.dmg`,`Reimbursement-${version}-mac-arm64.zip`,`Reimbursement-${version}-mac-x64.dmg`,`Reimbursement-${version}-mac-x64.zip`,`Reimbursement-${version}-win-x64.exe`];
 const found=new Map();
 function walk(directory){for(const item of fs.readdirSync(directory,{withFileTypes:true})){
   const file=path.join(directory,item.name);
@@ -13,9 +13,9 @@ function walk(directory){for(const item of fs.readdirSync(directory,{withFileTyp
   found.set(item.name,file);
 }}
 walk(source);
-if(found.size!==names.length)throw new Error('All three platform artifacts are required');
+if(found.size!==names.length)throw new Error('All Windows and Mac installer/archive artifacts are required');
 fs.mkdirSync(destination,{recursive:true});
 const sums=[];
 for(const name of names){const bytes=fs.readFileSync(found.get(name));if(bytes.length<1_000_000)throw new Error('Invalid artifact size');fs.copyFileSync(found.get(name),path.join(destination,name),fs.constants.COPYFILE_EXCL);sums.push(createHash('sha256').update(bytes).digest('hex')+'  '+name);}
 fs.writeFileSync(path.join(destination,'SHA256SUMS'),sums.join('\n')+'\n',{flag:'wx'});
-console.log('Collected and checksummed all three release assets.');
+console.log('Collected and checksummed all five release assets.');

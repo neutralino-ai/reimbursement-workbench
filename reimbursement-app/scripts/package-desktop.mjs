@@ -40,7 +40,7 @@ fs.writeFileSync(path.join(stage, 'package.json'), JSON.stringify({
 
 const artifacts = await build({
   projectDir: stage,
-  targets: (target === 'mac' ? Platform.MAC : Platform.WINDOWS).createTarget(target === 'mac' ? ['zip'] : ['portable'], arch),
+  targets: (target === 'mac' ? Platform.MAC : Platform.WINDOWS).createTarget(target === 'mac' ? ['dmg', 'zip'] : ['nsis'], arch),
   config: {
     appId: 'cn.neutrinophysics.reimbursement',
     productName: 'Reimbursement',
@@ -53,7 +53,7 @@ const artifacts = await build({
     publish: null,
     artifactName: 'Reimbursement-${version}-${os}-${arch}.${ext}',
     win: { icon: path.join(project, 'desktop', 'assets', 'icon.ico'), signExecutable: false },
-    portable: { requestExecutionLevel: 'user', unicode: true },
+    nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true, createDesktopShortcut: true, createStartMenuShortcut: true, shortcutName: '报销工作台', deleteAppDataOnUninstall: false },
     mac: { icon: path.join(project, 'desktop', 'assets', 'icon.icns'), category: 'public.app-category.finance', identity: '-', notarize: false },
   },
 });
