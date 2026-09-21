@@ -28,6 +28,8 @@ pnpm desktop:win       # Windows 安装程序
 pnpm ios:build
 ```
 
+iOS 完整源码位于 `reimbursement-app/ios/`（iOS 18+，支持 iPhone/iPad）；发行版本通过 TestFlight 安装，入口随 GitHub Release 的 `iOS-Installation.md` 提供。Mac 正式分发需使用 Developer ID 签名及 Apple 公证，不能把本地临时签名包作为正式包。[Apple 构建、签名与发布说明](docs/APPLE-RELEASE.md)。
+
 桌面发行包只包含静态前端和桌面运行文件。客户端“检查更新”只认 GitHub 的正式 Release，不把本地构建或分支提交当作可更新版本。
 
 v0.3.6 起可在应用内检查、下载和打开安装程序，显示下载进度，支持取消与重试；关闭更新窗口会继续下载。安装包按当前操作系统和 CPU 架构选择，下载完成及打开前均核对 SHA-256。Windows 使用安装程序更新，Mac 打开 DMG 后将应用拖入 Applications。旧版客户端首次升级到此版本仍使用原有下载入口。

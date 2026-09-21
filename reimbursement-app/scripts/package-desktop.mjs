@@ -3,12 +3,16 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { build, Platform, Arch } from 'electron-builder';
+import {macReleaseOptions} from './release-policy.mjs';
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(project, 'package.json'), 'utf8'));
 const args = process.argv.slice(2);
 const target = args.includes('--mac') ? 'mac' : 'win';
 const arch = args.includes('--arm64') ? Arch.arm64 : Arch.x64;
+for (const arg of args) if (!['--mac', '--win', '--arm64', '--release'].includes(arg)) throw new Error(`Unknown argument: ${arg}`);
+const release = args.includes('--release');
+const macSigning = target === 'mac' && release ? macReleaseOptions() : {identity: '-', notarize: false};
 // Keep the staging directory outside the pnpm workspace. Otherwise
 // electron-builder can discover the repository's node_modules and copy them
 // into the desktop asar even though the client has no runtime dependencies.
@@ -50,11 +54,12 @@ const artifacts = await build({
     files: ['package.json', 'desktop/*.cjs', 'dist/index.html', 'dist/frontend-config.json', 'dist/assets/**/*'],
     asar: true,
     npmRebuild: false,
+    forceCodeSigning: target === 'mac' && release,
     publish: null,
     artifactName: 'Reimbursement-${version}-${os}-${arch}.${ext}',
     win: { icon: path.join(project, 'desktop', 'assets', 'icon.ico'), signExecutable: false },
     nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true, createDesktopShortcut: true, createStartMenuShortcut: true, shortcutName: '报销工作台', deleteAppDataOnUninstall: false },
-    mac: { icon: path.join(project, 'desktop', 'assets', 'icon.icns'), category: 'public.app-category.finance', identity: '-', notarize: false },
+    mac: { icon: path.join(project, 'desktop', 'assets', 'icon.icns'), category: 'public.app-category.finance', ...macSigning },
   },
 });
 console.log(JSON.stringify({ artifacts, stagedFiles: desktopFiles.length, dataBundled: false }));

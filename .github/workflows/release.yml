@@ -1,4 +1,4 @@
-name: Desktop release
+name: Signed desktop and iOS release
 on:
   push:
     tags: ['v*']
@@ -15,10 +15,10 @@ jobs:
         include:
           - runner: macos-26
             target: mac-arm64
-            args: --mac --arm64
+            args: --mac --arm64 --release
           - runner: macos-15-intel
             target: mac-x64
-            args: --mac
+            args: --mac --release
           - runner: windows-2022
             target: win-x64
             args: --win
@@ -40,11 +40,19 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      - run: node scripts/package-desktop.mjs ${{ matrix.args }}
+      - name: Package (public Mac builds require Developer ID and notarization)
+        run: node scripts/package-desktop.mjs ${{ matrix.args }}
+        env:
+          MAC_SIGNING_IDENTITY: ${{ vars.MAC_SIGNING_IDENTITY }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.NOTARIZATION_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.NOTARIZATION_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
       - run: node scripts/verify-desktop-package.mjs ${{ matrix.args }}
-      - name: Verify macOS signature
+      - name: Require Developer ID, notarization ticket and Gatekeeper acceptance
         if: runner.os == 'macOS'
-        run: find ../output/desktop -name Reimbursement.app -maxdepth 4 -exec codesign --verify --deep --strict {} \;
+        run: node scripts/verify-mac-release.mjs ${{ matrix.args }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
@@ -53,8 +61,26 @@ jobs:
             output/desktop/*/Reimbursement-*-${{ matrix.target }}.dmg
             output/desktop/*/Reimbursement-*-${{ matrix.target }}.zip
           if-no-files-found: error
+  ios-check:
+    runs-on: macos-26
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: reimbursement-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install -g pnpm@11.19.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm ios:build
+      # Signed archives are uploaded to TestFlight by the account holder in Xcode.
+      # Do not attach a simulator .app or an App Store IPA as an installable iOS release.
   publish:
-    needs: build
+    needs: [build, ios-check]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -67,7 +93,8 @@ jobs:
       - name: Publish verified assets with checksums
         env:
           GH_TOKEN: ${{ github.token }}
+          TESTFLIGHT_PUBLIC_URL: ${{ vars.TESTFLIGHT_PUBLIC_URL }}
         run: |
           node reimbursement-app/scripts/collect-release.mjs release-assets publish-assets
           cd publish-assets
-          gh release create "$GITHUB_REF_NAME" Reimbursement-* SHA256SUMS --repo "$GITHUB_REPOSITORY" --verify-tag --title "Reimbursement Workbench $GITHUB_REF_NAME" --notes-file "../docs/releases/$GITHUB_REF_NAME.md" --latest
+          gh release create "$GITHUB_REF_NAME" Reimbursement-* iOS-Installation.md SHA256SUMS --repo "$GITHUB_REPOSITORY" --verify-tag --title "Reimbursement Workbench $GITHUB_REF_NAME" --notes-file "../docs/releases/$GITHUB_REF_NAME.md" --latest
