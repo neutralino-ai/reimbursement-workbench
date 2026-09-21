@@ -82,7 +82,11 @@ export function deliveryFiles(records: RecordItem[], context?: WorkflowContext):
   for (const record of records) {
     const applications = applicationDocuments(record, context);
     const combined = applications.filter(document => document.batchID);
-    const candidates = [
+    const separate = applications.filter(document => document.submissionFormat === 'separate-invoices-v1');
+    const candidates = separate.length ? [
+      ...(record.materials || []).filter(material => material.role === 'invoice' && separate.some(document => document.sourceMaterialIDs.includes(material.id))),
+      ...separate.flatMap(document => document.materials.filter(material => material.id === document.submissionPDFMaterialID)),
+    ] : [
       ...(!combined.length ? (record.materials || []).filter(material => ['invoice', 'payment'].includes(material.role) || material.role === 'statement' && !/\.docx$/i.test(material.filename)) : []),
       ...(combined.length ? combined : applications).flatMap(document => document.materials.filter(material => material.id === document.submissionPDFMaterialID)),
     ];
@@ -133,7 +137,7 @@ export function getRecordWorkflow(record: RecordItem, context?: WorkflowContext)
   return [
     { id: 'materials', state: invoices.length ? 'done' : invoiceProblem ? 'attention' : 'todo', detail: invoices.length ? `已留存 ${invoices.length} 份有效发票原件。` : invoiceProblem ? '发票原件缺失或已改变。' : '待收集发票原件。' },
     { id: 'payment', state: payments.length ? 'done' : paymentProblem ? 'attention' : 'todo', detail: payments.length ? `付款原件已留存，无需重复提供。${record.paymentVerified === true ? '付款事实已核实。' : '付款事实待核对。'}` : paymentProblem ? '付款原件缺失或已改变，请补齐。' : '尚缺实际付款凭证。' },
-    { id: 'claim', state: applications.length ? 'done' : staleApplication ? 'attention' : 'todo', detail: applications.length ? '正式申报整合 PDF 已备妥，原件与发票日期汇率证据完整。' : !exchange.valid ? `待补发票日期 ${record.date} 的中行折算价截图及申报整合 PDF。` : staleApplication ? '申请包需要更新，不能使用过期或未就绪的版本。' : '待准备含情况说明、发票、付款与汇率证据的正式整合 PDF；核对说明不计作申报材料。' },
+    { id: 'claim', state: applications.length ? 'done' : staleApplication ? 'attention' : 'todo', detail: applications.length ? '报销说明已备妥，原件与发票日期汇率证据完整。' : !exchange.valid ? `待补发票日期 ${record.date} 的中行折算价截图及报销说明 PDF。` : staleApplication ? '申请包需要更新，不能使用过期或未就绪的版本。' : '待准备报销说明 PDF（含付款与汇率截图），发票原件单独随 ZIP 提交；核对说明不计作申报材料。' },
     { id: 'submission', state: applications.length && files.length && delivered === files.length ? 'done' : 'todo', detail: `${delivered}/${files.length} 份现有交付文件已交财务秘书${applications.length ? '。' : '；正式申请包待准备。'}${record.submissionReference ? `ARP 单号另记为 ${record.submissionReference}。` : ''}` },
     { id: 'approval', state: confirmed && record.status === 'completed' ? 'done' : 'todo', detail: !confirmed ? `申报金额待确认；已关联获批 ${cny(record.approvedCNY)}，最终差额未知。` : `已关联获批 ${cny(record.approvedCNY)}；待批 / 未关联 ${cny(record.outstandingCNY)}。` },
   ];

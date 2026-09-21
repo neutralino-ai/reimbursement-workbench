@@ -31,6 +31,20 @@ test('ready combined package delivers one PDF across both records without invent
   assert.equal(deliveryFiles(records,context({documents:[{...doc,stale:true}]})).length,2);
 });
 
+test('new-format single and combined packages require statements and referenced invoices, not separate screenshots', () => {
+  const jan=readyRecord(),feb=readyRecord({id:'gpt-feb',materials:[original('invoice','ok','invoice-feb'),original('payment','ok','payment-feb')]});
+  const doc=application({submissionFormat:'separate-invoices-v1',batchID:'batch',recordIDs:[jan.id,feb.id],sourceMaterialIDs:['invoice','invoice-feb','payment','payment-feb','fx']});
+  const ctx=context({documents:[doc]});
+  assert.deepEqual(deliveryFiles([jan],ctx).map(f=>f.material.id),['invoice','application-pdf']);
+  const files=deliveryFiles([jan,feb],ctx);
+  assert.equal(files.length,3);assert.ok(files.every(f=>f.kind!=='payment'&&f.status==='unknown'));
+  assert.deepEqual(files.find(f=>f.kind==='statement').recordIDs,[jan.id,feb.id]);
+  ctx.deliveryItems=[{recordID:jan.id,materialID:'application-pdf',status:'submitted',version:'saved'}];
+  assert.equal(byId(jan,ctx).submission.state,'todo','separate invoice is still owed');
+  ctx.deliveryItems.push({recordID:jan.id,materialID:'invoice',status:'submitted',version:'saved'});
+  assert.equal(byId(jan,ctx).submission.state,'done');
+});
+
 test('financial review completes the first four stages while full approval closes the fifth', () => {
   const input = record({ materials: [], financeReviewPending: true, submissionReference: 'ARP-REVIEW', status: 'submitted' });
   const before = structuredClone(input);

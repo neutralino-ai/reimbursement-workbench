@@ -16,6 +16,8 @@ pnpm build
 
 公开连接配置位于 `reimbursement-app/public/frontend-config.json`，只包含 API 地址。服务端不在本仓库中；客户端只消费已部署的 HTTPS API。
 
+申报材料以 ZIP 交付：报销说明 PDF 内保留付款、汇率查询和科研用途截图，发票原件单独放在 ZIP 中。支持单笔与多笔合并报销，Word 说明可单独下载。
+
 ## 客户端发行
 
 ```sh
