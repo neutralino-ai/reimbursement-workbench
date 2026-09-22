@@ -32,15 +32,20 @@ for(let attempt=0;attempt<60;attempt++){
       const groups=await api(`/v1/betaGroups?filter[app]=${app}`);
       const group=groups.data.find(g=>g.attributes.isInternalGroup&&g.attributes.name==='Reimbursement Internal');
       if(!group)throw new Error('Build processed, but Reimbursement Internal testing group has not been configured');
-      await api(`/v1/betaGroups/${group.id}/relationships/builds`,'POST',{data:[{type:'builds',id:entry.id}]});
+      if(!group.attributes.hasAccessToAllBuilds)throw new Error('Enable automatic distribution for Reimbursement Internal in App Store Connect');
+      // Internal groups receive builds automatically. Apple rejects the public
+      // add-build relationship endpoint for internal groups with HTTP 422.
       const assigned=await api(`/v1/betaGroups/${group.id}/builds?limit=200`);
-      if(!assigned.data.some(b=>b.id===entry.id))throw new Error('Internal group build assignment not confirmed');
-      const audit={version,build,buildID:entry.id,processingState:state,internalGroup:group.id,assigned:true};
-      console.log(JSON.stringify(audit));
-      if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,`\nApple processed iOS ${version} (${build}); assigned to Reimbursement Internal. Device installation is a separate check.\n`);
-      process.exit(0);
+      const beta=await api(`/v1/builds/${entry.id}/buildBetaDetail`);
+      if(assigned.data.some(b=>b.id===entry.id)&&beta.data.attributes.internalBuildState==='IN_BETA_TESTING'){
+        const audit={version,build,buildID:entry.id,processingState:state,internalGroup:group.id,assigned:true,internalBuildState:beta.data.attributes.internalBuildState};
+        console.log(JSON.stringify(audit));
+        if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,`\nApple processed iOS ${version} (${build}); available in Reimbursement Internal. Device installation is a separate check.\n`);
+        process.exit(0);
+      }
+      console.log('Waiting for automatic internal TestFlight distribution');
     }
   }else console.log(`Waiting for Apple to register iOS ${version} (${build})`);
   await new Promise(resolve=>setTimeout(resolve,20000));
 }
-throw new Error('Apple processing is still pending; do not claim TestFlight is ready.');
+throw new Error('Apple processing or internal distribution is still pending; do not claim TestFlight is ready.');
