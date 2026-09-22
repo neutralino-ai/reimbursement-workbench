@@ -28,6 +28,8 @@ jobs:
       - run: npm install -g pnpm@11.19.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck && pnpm test
+      - name: Verify native plugins on a running iOS Simulator
+        run: pnpm ios:build && node scripts/test-ios-plugins.mjs
       - name: Allocate monotonic build number
         run: |
           echo "IOS_BUILD_NUMBER=$(( $(date +%s) - 1577836800 ))" >> "$GITHUB_ENV"
