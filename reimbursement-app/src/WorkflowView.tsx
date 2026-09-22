@@ -6,7 +6,7 @@ import {activeBatches,batchAmounts,batchTitle,lockedForBatch} from './claim-batc
 import type { DeliveryStatus, Material, RecordItem, Workspace } from './types';
 import { applicationDocuments, arePriorStepsComplete, cny, deliveryFiles, getExchangeRateEvidence, getRecordWorkflow, isFinanceCompleted, sortWorkflowRecords, sourceFreshness, validMaterials, type DeliveryFile, type WorkflowStepId } from './workflow';
 import './workflow.css';
-import {mobileNextAction} from './workflow-next-action';
+import {mobileNextAction, matchesProgress, progressFilters, type ProgressFilter} from './workflow-next-action';
 
 type Props = { data: Workspace; onOpenRecord: (id: string, step: WorkflowStepId) => void; onOpenMaterials: () => void; onOpenARP: () => void; onReload: () => Promise<unknown> };
 type CellModel = { done: boolean; title: string; detail: string; link?: { material: Material; label: string } };
@@ -55,6 +55,7 @@ export default function WorkflowView({ data, onOpenRecord, onReload }: Props) {
   const [editor,setEditor]=useState<{recordIDs:string[];batchID?:string}|null>(null);
   const batches=activeBatches(data),grouped=new Set(batches.flatMap(b=>b.recordIDs));
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [progress, setProgress] = useState<ProgressFilter>('all');
   const [search, setSearch] = useState('');
   const [freshDays, setFreshDays] = useState(() => { try { const value = Number(localStorage.getItem('reimbursement.sourceFreshDays')); return Number.isInteger(value) && value >= 1 && value <= 365 ? value : 7; } catch { return 7; } });
   const source = data.sources.find(item => item.id === 'chatgpt');
@@ -64,7 +65,7 @@ export default function WorkflowView({ data, onOpenRecord, onReload }: Props) {
   const completed = sorted.filter(isFinanceCompleted).length;
   const query = search.trim().toLowerCase();
   const rows = sorted.map(record => ({ record, cells: columns.map(column => cellModel(record, column.id, data, sourceCurrent)) }));
-  const visible = rows.filter(({ record }) => (filter === 'all' || (filter === 'completed' ? isFinanceCompleted(record) : !isFinanceCompleted(record))) && `${record.billingMonth} ${record.date} ${record.invoiceNumber} ${record.accountName} ${record.submissionReference}`.toLowerCase().includes(query));
+  const visible = rows.filter(({ record }) => (filter === 'all' || (filter === 'completed' ? isFinanceCompleted(record) : !isFinanceCompleted(record))) && matchesProgress(record, data, progress) && `${record.billingMonth} ${record.date} ${record.invoiceNumber} ${record.accountName} ${record.submissionReference}`.toLowerCase().includes(query));
   const counts = columns.map((_, index) => rows.filter(row => row.cells[index].done).length);
   const chosen=data.records.filter(r=>selected.includes(r.id)&&!grouped.has(r.id)&&!lockedForBatch(r,data));
   const selectedAmounts=batchAmounts(chosen);
@@ -77,12 +78,14 @@ export default function WorkflowView({ data, onOpenRecord, onReload }: Props) {
   return <section className="reimbursement-overview" aria-label="费用报销总览">
     <div className={`ov-batch-toolbar ${mobileSelecting?'is-selecting':''}`}><span>{chosen.length?`已选 ${chosen.length} 笔 · ${selectedAmounts.totalCNY?'¥'+selectedAmounts.totalCNY:'待补汇率'}`:'勾选 2–10 笔费用，合并准备材料'}</span><button className="button primary small" disabled={chosen.length<2||chosen.length>10} onClick={()=>{setEditor({recordIDs:chosen.map(r=>r.id)});setSelected([]);setMobileSelecting(false);}}>合并准备材料{chosen.length?`（${chosen.length}）`:''}</button>{chosen.length>0&&<button className="text-button" onClick={()=>setSelected([])}>取消选择</button>}</div>
     {editor&&<BatchEditor key={editor.batchID||editor.recordIDs.join(':')} data={data} recordIDs={editor.recordIDs} batch={batches.find(b=>b.id===editor.batchID)} onReload={onReload} onClose={()=>setEditor(null)} delivery={<DeliveryPanel data={data} onReload={onReload} recordIDs={editor.recordIDs}/>}/>}
-    <div className="ov-toolbar"><div className="ov-filters" role="group" aria-label="费用筛选">{([['all', '全部', sorted.length], ['pending', '待处理', sorted.length - completed], ['completed', '已报销', completed]] as const).map(([value, label, count]) => <button key={value} className={filter === value ? 'is-active' : ''} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}<span>{count}</span></button>)}</div><label className="ov-search"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.8" stroke="currentColor" strokeWidth="1.3" /><path d="m13 13 4.2 4.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg><input aria-label="搜索月份、发票或账号" placeholder="搜索月份、发票或账号" value={search} onChange={event => setSearch(event.target.value)} /></label></div>
+    <div className="ov-toolbar"><div className="ov-filters" role="group" aria-label="费用筛选">{([['all', '全部', sorted.length], ['pending', '待处理', sorted.length - completed], ['completed', '已报销', completed]] as const).map(([value, label, count]) => <button key={value} className={filter === value ? 'is-active' : ''} aria-pressed={filter === value} onClick={() => {setFilter(value);setProgress('all');}}>{label}<span>{count}</span></button>)}</div><div className="ov-search-tools"><label className="ov-progress-filter"><span className="sr-only">按进度筛选</span><select aria-label="按进度筛选" value={progress} onChange={event=>{setProgress(event.target.value as ProgressFilter);setFilter('all');}}>{progressFilters.map(([value,label])=><option key={value} value={value}>{label} ({sorted.filter(record=>matchesProgress(record,data,value)).length})</option>)}</select></label><label className="ov-search"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.8" stroke="currentColor" strokeWidth="1.3" /><path d="m13 13 4.2 4.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg><input aria-label="搜索月份、发票或账号" placeholder="搜索月份、发票或账号" value={search} onChange={event => setSearch(event.target.value)} /></label></div></div>
     <div className="ov-mobile">
       <div className="ov-mobile-summary" aria-label="五步完成数量">{columns.map((column,index)=><div key={column.id}><span>{column.title}</span><strong>{counts[index]}<small>/{sorted.length}</small></strong></div>)}</div>
       <div className="ov-mobile-heading"><span>费用 <small>最新在前</small></span><button className="text-button" aria-pressed={mobileSelecting} onClick={()=>{setMobileSelecting(value=>!value);setSelected([]);}}>{mobileSelecting?'完成选择':'合并材料'}</button></div>
       <table className="ov-mobile-table"><colgroup><col className="ov-mobile-identity-width"/><col/></colgroup><thead><tr><th scope="col">日期 / 金额</th><th scope="col">当前进度</th></tr></thead><tbody>{visible.map(({record,cells})=>{
-        const action=mobileNextAction(record,data),index=columns.findIndex(column=>column.id===action.step),cell=cells[index];
+        const next=mobileNextAction(record,data);
+        const action=progress==='missing-payment'||progress==='verify-payment'?{...next,step:'payment' as const,title:progress==='missing-payment'?'补付款凭证':'核验付款'}:next;
+        const index=columns.findIndex(column=>column.id===action.step),cell=cells[index];
         const batch=batches.find(item=>item.recordIDs.includes(record.id));
         return <tr key={record.id} className={action.completed?'is-complete':''}>
           <th scope="row"><div className="ov-mobile-identity">{mobileSelecting&&!grouped.has(record.id)&&!lockedForBatch(record,data)&&<label className="ov-mobile-select"><input type="checkbox" aria-label={'选择合并 '+record.billingMonth+' '+record.invoiceNumber} checked={selected.includes(record.id)} onChange={event=>setSelected(ids=>event.target.checked?[...ids,record.id]:ids.filter(id=>id!==record.id))}/>选择</label>}<time dateTime={record.date}>{record.date||record.billingMonth}</time><strong>{amount(record)}</strong><span title={`${record.accountName} ${record.plan}`}>{record.accountName||record.vendor} {record.plan}</span></div></th>

@@ -12,7 +12,10 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
   .cloud-session { flex-wrap: wrap; gap: 8px 14px; padding: 10px 16px; }
   .cloud-session>span { overflow-wrap: anywhere; min-width: 0; }
   .workbench-header { align-items: flex-start; flex-direction: column; gap: 16px; }
-  .workbench-actions { width: 100%; gap: 8px; }
+  .workbench-actions { position: relative; width: 100%; gap: 8px; }
+  .workbench-menu { position: static; margin-left: auto; }
+  .workbench-menu-items { right: 0; top: calc(100% + 8px); width: min(240px, 100%); box-sizing: border-box; }
+  .workbench-menu-items>* { min-height: 44px; white-space: normal; overflow-wrap: anywhere; }
   .workbench-actions .button { flex: 1 1 auto; }
   .ai-dialog, .connection-dialog { max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 28px); }
   .workflow-drawer { padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: max(16px, env(safe-area-inset-bottom)); }
@@ -30,6 +33,11 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
   .ov-filters button { justify-content: center; min-height: 40px; padding: 6px; border-radius: 7px; font-size: 13px; }
   .ov-filters button.is-active { border-color: #dbe3ef; box-shadow: 0 1px 3px #18233308; }
   .ov-search { width: 100%; min-height: 44px; border-radius: 8px; }
+  .ov-search-tools { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+  .ov-progress-filter { min-width: 0; }
+  .ov-progress-filter select { width: 100%; min-height: 44px; font-size: 13px; }
+  .ov-search-tools .ov-search { min-width: 0; box-sizing: border-box; padding: 0 9px; }
+  .ov-search-tools .ov-search input { font-size: 16px; }
   .ov-mobile-summary { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); padding: 14px 4px; border: 1px solid #e2e7ef; border-radius: 10px; background: #fff; }
   .ov-mobile-summary>div { display: flex; flex-direction: column; gap: 5px; align-items: center; }
   .ov-mobile-summary>div+div { border-left: 1px solid #edf0f5; }
