@@ -53,13 +53,40 @@ jobs:
           test -n "$APPLE_API_PRIVATE_KEY"
           umask 077
           printf '%s' "$APPLE_API_PRIVATE_KEY" > "$RUNNER_TEMP/reimbursement-apple-api.p8"
+      - name: Install Developer ID in temporary keychain
+        if: runner.os == 'macOS'
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import base64,os,pathlib
+          value=os.environ.get('MAC_CSC_LINK')
+          if not value: raise SystemExit('Missing Developer ID P12')
+          (pathlib.Path(os.environ['RUNNER_TEMP'])/'reimbursement-mac.p12').write_bytes(base64.b64decode(value,validate=True))
+          PY
+          keychain="$RUNNER_TEMP/reimbursement-mac.keychain-db"
+          password="$(openssl rand -hex 32)"
+          echo "::add-mask::$password"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/reimbursement-mac.p12" -P "$MAC_CSC_KEY_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild -k "$keychain"
+          # The keychain password differs from the P12 password. Import explicitly
+          # to avoid electron-builder 26.15.3 passing the latter to this command.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain"
+          curl --fail --silent --show-error https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          security add-certificates -k "$keychain" "$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          security find-identity -v -p codesigning "$keychain"
       - name: Package signed and notarized Mac app
         if: runner.os == 'macOS'
         run: node scripts/package-desktop.mjs ${{ matrix.args }}
         env:
           MAC_SIGNING_IDENTITY: ${{ vars.MAC_SIGNING_IDENTITY }}
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          CSC_KEYCHAIN: ${{ runner.temp }}/reimbursement-mac.keychain-db
           APPLE_API_KEY: ${{ runner.temp }}/reimbursement-apple-api.p8
           APPLE_API_KEY_ID: ${{ vars.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
@@ -80,7 +107,9 @@ jobs:
           if-no-files-found: error
       - name: Remove notarization credential
         if: always() && runner.os == 'macOS'
-        run: rm -f "$RUNNER_TEMP/reimbursement-apple-api.p8"
+        run: |
+          security delete-keychain "$RUNNER_TEMP/reimbursement-mac.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/reimbursement-apple-api.p8" "$RUNNER_TEMP/reimbursement-mac.p12" "$RUNNER_TEMP/DeveloperIDG2CA.cer"
   ios-check:
     runs-on: macos-26
     timeout-minutes: 30
