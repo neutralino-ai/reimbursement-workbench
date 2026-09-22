@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {macReleaseOptions,syncIOSVersion,testFlightURL} from '../scripts/release-policy.mjs';
+import {macReleaseOptions,syncIOSVersion,testFlightURL,iosInstallationText} from '../scripts/release-policy.mjs';
 test('Mac public release refuses missing, ad-hoc and development signing',()=>{
   for(const identity of ['', '-', 'Apple Development: Example', 'Apple Distribution: Example']) assert.throws(()=>macReleaseOptions({MAC_SIGNING_IDENTITY:identity,APPLE_KEYCHAIN_PROFILE:'test'}));
   assert.throws(()=>macReleaseOptions({MAC_SIGNING_IDENTITY:'Example (ABCDEFGHIJ)'}),/notarization/);
@@ -22,4 +22,11 @@ test('iOS Debug and Release versions stay synchronized; build numbers are explic
 test('iOS release entry accepts only a public TestFlight invitation',()=>{
   assert.equal(testFlightURL('https://testflight.apple.com/join/Abcd1234'),'https://testflight.apple.com/join/Abcd1234');
   for(const invalid of ['', 'https://example.test/join/Abcd1234','https://testflight.apple.com.evil.test/join/Abcd1234','https://testflight.apple.com/join/Abcd1234?token=secret'])assert.throws(()=>testFlightURL(invalid));
+});
+
+test('internal TestFlight distribution never fabricates a public invitation',()=>{
+  const text=iosInstallationText('0.3.7',{TESTFLIGHT_DISTRIBUTION:'internal'});
+  assert.match(text,/内部测试/);
+  assert.doesNotMatch(text,/testflight.apple.com\/join/);
+  assert.throws(()=>iosInstallationText('0.3.7',{}));
 });

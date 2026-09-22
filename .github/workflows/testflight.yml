@@ -1,0 +1,95 @@
+name: Signed iOS TestFlight
+on:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+jobs:
+  distribute:
+    if: github.repository == 'neutralino-ai/reimbursement-workbench' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: macos-26
+    environment: apple-release
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: reimbursement-app
+        shell: bash
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      DEVELOPMENT_TEAM: ${{ vars.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install -g pnpm@11.19.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck && pnpm test
+      - name: Allocate monotonic build number
+        run: |
+          echo "IOS_BUILD_NUMBER=$(( $(date +%s) - 1577836800 ))" >> "$GITHUB_ENV"
+      - name: Install distribution identity in temporary keychain
+        env:
+          IOS_DISTRIBUTION_P12: ${{ secrets.IOS_DISTRIBUTION_P12 }}
+          IOS_DISTRIBUTION_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_PASSWORD }}
+          IOS_PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import base64, os, pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          for name,filename in [('IOS_DISTRIBUTION_P12','reimbursement-ios.p12'),('IOS_PROVISIONING_PROFILE','reimbursement-ios.mobileprovision')]:
+              value=os.environ.get(name)
+              if not value: raise SystemExit(f'Missing {name}')
+              (root/filename).write_bytes(base64.b64decode(value,validate=True))
+          PY
+          keychain="$RUNNER_TEMP/reimbursement-ios.keychain-db"
+          password="$(openssl rand -hex 32)"
+          echo "::add-mask::$password"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/reimbursement-ios.p12" -P "$IOS_DISTRIBUTION_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          security cms -D -i "$RUNNER_TEMP/reimbursement-ios.mobileprovision" > "$RUNNER_TEMP/reimbursement-profile.plist"
+          python3 - <<'PY'
+          import os,plistlib,pathlib,shutil,datetime
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          p=plistlib.loads((root/'reimbursement-profile.plist').read_bytes())
+          e=p['Entitlements']
+          assert e['application-identifier']==os.environ['DEVELOPMENT_TEAM']+'.cn.neutrinophysics.reimbursement'
+          assert e['get-task-allow']==False and e['beta-reports-active']==True
+          assert not p.get('ProvisionedDevices') and not p.get('ProvisionsAllDevices')
+          assert p['ExpirationDate']>datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+          folder=pathlib.Path.home()/'Library/MobileDevice/Provisioning Profiles'
+          folder.mkdir(parents=True,exist_ok=True)
+          target=folder/(p['UUID']+'.mobileprovision')
+          shutil.copyfile(root/'reimbursement-ios.mobileprovision',target)
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              f.write(f"IOS_PROFILE_UUID={p['UUID']}\nIOS_PROFILE_PATH={target}\n")
+          PY
+      - run: node scripts/build-ios.mjs --archive
+      - run: node scripts/ios-distribution.mjs export
+      - name: Upload signed IPA to App Store Connect
+        env:
+          APPLE_API_KEY_ID: ${{ vars.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$APPLE_API_PRIVATE_KEY" > "$RUNNER_TEMP/reimbursement-apple-api.p8"
+          export APPLE_API_KEY="$RUNNER_TEMP/reimbursement-apple-api.p8"
+          node scripts/ios-distribution.mjs upload
+          node scripts/testflight-status.mjs
+      - name: Remove signing credentials
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/reimbursement-ios.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/reimbursement-ios.p12" "$RUNNER_TEMP/reimbursement-ios.mobileprovision" "$RUNNER_TEMP/reimbursement-profile.plist" "$RUNNER_TEMP/reimbursement-apple-api.p8"
+          if [ -n "${IOS_PROFILE_PATH:-}" ]; then rm -f "$IOS_PROFILE_PATH"; fi

@@ -1,5 +1,6 @@
 name: Signed desktop and iOS release
 on:
+  workflow_dispatch:
   push:
     tags: ['v*']
 permissions:
@@ -9,6 +10,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
+    if: github.repository == 'neutralino-ai/reimbursement-workbench' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    environment: apple-release
     strategy:
       fail-fast: false
       matrix:
@@ -36,19 +39,33 @@ jobs:
       - run: npm install -g pnpm@11.19.0
       - run: pnpm install --frozen-lockfile
       - name: Require the tag to match the package version
+        if: startsWith(github.ref, 'refs/tags/')
         run: node -e 'if ("v" + require("./package.json").version !== process.env.GITHUB_REF_NAME) process.exit(1)'
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      - name: Package (public Mac builds require Developer ID and notarization)
+      - name: Prepare API notarization credential
+        if: runner.os == 'macOS'
+        env:
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$APPLE_API_PRIVATE_KEY"
+          umask 077
+          printf '%s' "$APPLE_API_PRIVATE_KEY" > "$RUNNER_TEMP/reimbursement-apple-api.p8"
+      - name: Package signed and notarized Mac app
+        if: runner.os == 'macOS'
         run: node scripts/package-desktop.mjs ${{ matrix.args }}
         env:
           MAC_SIGNING_IDENTITY: ${{ vars.MAC_SIGNING_IDENTITY }}
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.NOTARIZATION_APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.NOTARIZATION_APP_PASSWORD }}
-          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ runner.temp }}/reimbursement-apple-api.p8
+          APPLE_API_KEY_ID: ${{ vars.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
+      - name: Package Windows client
+        if: runner.os == 'Windows'
+        run: node scripts/package-desktop.mjs ${{ matrix.args }}
       - run: node scripts/verify-desktop-package.mjs ${{ matrix.args }}
       - name: Require Developer ID, notarization ticket and Gatekeeper acceptance
         if: runner.os == 'macOS'
@@ -61,6 +78,9 @@ jobs:
             output/desktop/*/Reimbursement-*-${{ matrix.target }}.dmg
             output/desktop/*/Reimbursement-*-${{ matrix.target }}.zip
           if-no-files-found: error
+      - name: Remove notarization credential
+        if: always() && runner.os == 'macOS'
+        run: rm -f "$RUNNER_TEMP/reimbursement-apple-api.p8"
   ios-check:
     runs-on: macos-26
     timeout-minutes: 30
@@ -77,10 +97,14 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm ios:build
-      # Signed archives are uploaded to TestFlight by the account holder in Xcode.
-      # Do not attach a simulator .app or an App Store IPA as an installable iOS release.
+      # Simulator validation is separate from signed TestFlight distribution.
+  ios-distribute:
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/testflight.yml
+    secrets: inherit
   publish:
-    needs: [build, ios-check]
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, ios-check, ios-distribute]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -94,6 +118,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TESTFLIGHT_PUBLIC_URL: ${{ vars.TESTFLIGHT_PUBLIC_URL }}
+          TESTFLIGHT_DISTRIBUTION: ${{ vars.TESTFLIGHT_DISTRIBUTION }}
         run: |
           node reimbursement-app/scripts/collect-release.mjs release-assets publish-assets
           cd publish-assets

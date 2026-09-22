@@ -30,8 +30,13 @@ if (archive) {
   const archivePath = path.join(output, `Reimbursement-${version}-${process.env.IOS_BUILD_NUMBER}.xcarchive`);
   if (fs.existsSync(archivePath)) throw new Error('Archive already exists; choose a new build number instead of overwriting.');
   build.push(`DEVELOPMENT_TEAM=${process.env.DEVELOPMENT_TEAM}`, '-archivePath', archivePath);
+  if (process.env.IOS_PROFILE_UUID) {
+    if (!/^[A-Fa-f0-9-]{36}$/.test(process.env.IOS_PROFILE_UUID)) throw new Error('Invalid IOS_PROFILE_UUID');
+    if (provisioning) throw new Error('Manual profiles do not require provisioning updates');
+    build.push('CODE_SIGN_STYLE=Manual', 'CODE_SIGN_IDENTITY=Apple Distribution', `PROVISIONING_PROFILE_SPECIFIER=${process.env.IOS_PROFILE_UUID}`);
+  }
   if (provisioning) build.push('-allowProvisioningUpdates');
   build.push('archive');
 } else build.push('CODE_SIGNING_ALLOWED=NO', 'build');
 run('xcodebuild', build);
-console.log(archive ? 'Archive created. Upload through Xcode Organizer to App Store Connect; this is not a public IPA.' : 'iOS Simulator Release build complete.');
+console.log(archive ? 'Signed device archive created; export and upload are separate steps.' : 'iOS Simulator Release build complete.');
