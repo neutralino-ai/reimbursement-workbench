@@ -14,9 +14,9 @@ const version=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'))).ver
 const bundle='cn.neutrinophysics.reimbursement';
 const work=fs.mkdtempSync(path.join(os.tmpdir(),'reimbursement-plugin-smoke-'));
 let device;
-function run(args,{allowFailure=false}={}){
-  const r=spawnSync('xcrun',['simctl',...args],{encoding:'utf8',timeout:180000});
-  if(!allowFailure&&(r.error||r.status!==0))throw new Error(r.error?.message||r.stderr||`simctl ${args[0]} failed`);
+function run(args,{allowFailure=false,timeout=180000}={}){
+  const r=spawnSync('xcrun',['simctl',...args],{encoding:'utf8',timeout});
+  if(!allowFailure&&(r.error||r.status!==0))throw new Error(`simctl ${args[0]}: ${r.error?.message||r.stderr||'failed'}\n${r.stdout?.slice(-2000)||''}`);
   return r.stdout?.trim()||'';
 }
 try{
@@ -57,7 +57,11 @@ try{
   const template=candidates[0];
   device=run(['create',`Reimbursement plugins ${Date.now()}`,template.deviceTypeIdentifier,template.runtime]);
   assert.match(device,/^[A-F0-9-]{36}$/i);
-  run(['boot',device]);run(['bootstatus',device,'-b']);
+  run(['boot',device]);
+  // A freshly created iOS runtime can need more than three minutes on hosted Macs.
+  // Wait for boot completion before installing; the native probe is still mandatory.
+  console.log('Waiting for fresh simulator boot:',template.runtime);
+  run(['bootstatus',device,'-b'],{timeout:480000});
   run(['install',device,copy]);run(['launch',device,bundle]);
   const container=run(['get_app_container',device,bundle,'data']);
   const prefs=path.join(container,'Library/Preferences',`${bundle}.plist`);
