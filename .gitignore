@@ -37,6 +37,10 @@ reimbursement-app/assessment/import-policy-202509.mjs
 *.pem
 *.key
 *.p12
+*.p8
+*.mobileprovision
+*.provisionprofile
+*.dpapi
 *.pfx
 *.sqlite
 *.sqlite-*

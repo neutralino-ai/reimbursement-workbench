@@ -34,3 +34,5 @@ jobs:
       - run: pnpm ios:sync
       - name: Unsigned iOS Simulator build
         run: pnpm ios:build
+      - name: Launch simulator and call native plugins
+        run: node scripts/test-ios-plugins.mjs

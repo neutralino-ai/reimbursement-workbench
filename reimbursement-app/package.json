@@ -1,6 +1,6 @@
 {
   "name": "reimbursement-workbench",
-  "version": "0.3.6",
+  "version": "0.3.13",
   "private": true,
   "type": "module",
   "engines": {
@@ -19,7 +19,9 @@
     "ios:sync": "pnpm build && cap sync ios && node scripts/prepare-ios.mjs && node scripts/verify-ios.mjs",
     "ios:open": "cap open ios",
     "ios:check": "node scripts/verify-ios.mjs",
-    "ios:build": "node scripts/build-ios.mjs"
+    "ios:build": "node scripts/build-ios.mjs",
+    "ios:archive": "node scripts/build-ios.mjs --archive",
+    "desktop:mac:release": "pnpm build && node scripts/package-desktop.mjs --mac --arm64 --release && node scripts/verify-desktop-package.mjs --mac --arm64 && node scripts/verify-mac-release.mjs --arm64"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",
