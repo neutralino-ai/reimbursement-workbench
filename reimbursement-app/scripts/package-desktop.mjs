@@ -50,6 +50,7 @@ const artifacts = await build({
     productName: 'Reimbursement',
     executableName: 'Reimbursement',
     electronVersion: manifest.devDependencies.electron,
+    ...(process.env.REIMBURSE_ELECTRON_DIST ? { electronDist: path.resolve(process.env.REIMBURSE_ELECTRON_DIST) } : {}),
     directories: { output, buildResources: path.join(project, 'desktop', 'assets') },
     files: ['package.json', 'desktop/*.cjs', 'dist/index.html', 'dist/frontend-config.json', 'dist/assets/**/*'],
     asar: true,

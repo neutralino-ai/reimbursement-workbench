@@ -1,7 +1,8 @@
 import {purchaseTypeLabel} from './purchase-type';
 import {useEffect,useRef,useState} from 'react';
-import {api} from './api';
+import {api,cachedResource,peekCachedResource} from './api';
 import AttachmentPreview from './AttachmentPreview';
+import {prepareUpload} from './image-upload';
 import VendorBadge,{vendorLabel} from './VendorBadge';
 import type {Workspace} from './types';
 import type {WorkflowStepId} from './workflow';
@@ -20,38 +21,51 @@ export default function ScreenshotInboxButton(props:Props){
   return <><div className="screenshot-entry"><button className="button primary" onClick={()=>setOpen(true)}>批量传截图</button><span>自动识别并匹配费用</span></div>{open&&<InboxDialog {...props} onClose={()=>setOpen(false)}/>}</>;
 }
 function InboxDialog({data,onReload,onOpenRecord,onClose}:Props&{onClose:()=>void}){
-  const dialog=useRef<HTMLDialogElement>(null),input=useRef<HTMLInputElement>(null),lock=useRef(false),reload=useRef(onReload);reload.current=onReload;
-  const [state,setState]=useState<Inbox|null>(null),[error,setError]=useState(''),[loadError,setLoadError]=useState(''),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
-  const [pending,setPending]=useState<{id:string;file:File}[]>([]),[filter,setFilter]=useState<'pending'|'all'>('pending');
-  const signature=useRef('');
-  useEffect(()=>{dialog.current?.showModal();let alive=true,inFlight=false;
-    const poll=async()=>{if(inFlight)return;inFlight=true;try{const next=await api<Inbox>('/api/automation/inbox');if(!alive)return;setState(next);setLoadError('');const changed=next.items.filter(i=>i.status==='matched').map(i=>i.id+':'+i.version).join('|');if(changed!==signature.current){signature.current=changed;void reload.current().catch(()=>{});}}catch(e){if(alive)setLoadError(e instanceof Error?e.message:'收件箱读取失败');}finally{inFlight=false;}};
-    void poll();const timer=setInterval(()=>void poll(),3000);return()=>{alive=false;clearInterval(timer);};
-  },[]);
-  function choose(files:FileList|null){
-    if(lock.current)return;setError('');setMessage('');const additions:{id:string;file:File}[]=[],errors:string[]=[];
-    for(const file of Array.from(files||[])){
-      if(!file.size||file.size>20*1024*1024||! /\.(png|jpe?g|webp)$/i.test(file.name)){errors.push(file.name+'：请选择 20 MB 内的 PNG、JPEG 或 WebP 截图。');continue;}
-      if(pending.length+additions.length>=20){errors.push('每次最多选择 20 张，请分批上传。');break;}
-      additions.push({id:crypto.randomUUID(),file});
-    }
-    setPending(previous=>[...previous,...additions]);setError(errors.join(' '));if(input.current)input.current.value='';
+  const dialog=useRef<HTMLDialogElement>(null),input=useRef<HTMLInputElement>(null),lock=useRef(false),preparing=useRef(false),reload=useRef(onReload);reload.current=onReload;
+  const [state,setState]=useState<Inbox|null>(()=>peekCachedResource<Inbox>('/api/automation/inbox')?.data||null),[error,setError]=useState(''),[loadError,setLoadError]=useState(''),[busy,setBusy]=useState(false),[preparingView,setPreparingView]=useState(false),[message,setMessage]=useState('');
+  const [pending,setPending]=useState<{id:string;file:File;note:string;originalBytes:number}[]>([]),[filter,setFilter]=useState<'pending'|'all'>('pending');
+  const inboxSignature=(value:Inbox|null)=>value?.items.filter(i=>i.status==='matched').map(i=>i.id+':'+i.version).join('|')||'';
+  const signature=useRef(inboxSignature(state)),latest=useRef(state),lastError=useRef(false),alive=useRef(true),scheduleNext=useRef<()=>void>(()=>{}),inFlight=useRef<Promise<Inbox|null>|null>(null);
+  latest.current=state;
+  function load(force=false,notifyChanges=true){
+    if(inFlight.current)return inFlight.current;
+    if(!force&&document.visibilityState!=='visible'){scheduleNext.current();return Promise.resolve(latest.current);}
+    const request=(async()=>{try{const active=latest.current?.items.some(i=>['queued','running'].includes(i.status));const next=await cachedResource<Inbox>('/api/automation/inbox',{force,maxAgeMs:active?5000:60000,timeoutMs:15000});latest.current=next;lastError.current=false;if(alive.current){setState(next);setLoadError('');const changed=inboxSignature(next);if(changed!==signature.current){signature.current=changed;if(notifyChanges)void reload.current().catch(()=>{});}}return next;}catch(e){lastError.current=true;if(alive.current)setLoadError(e instanceof Error?e.message:'收件箱读取失败');return null;}finally{inFlight.current=null;if(alive.current)scheduleNext.current();}})();
+    inFlight.current=request;return request;
   }
-  async function refresh(){setState(await api<Inbox>('/api/automation/inbox'));await onReload();}
-  async function upload(){if(lock.current||!pending.length)return;lock.current=true;setBusy(true);setError('');setFilter('all');let count=0;
+  useEffect(()=>{alive.current=true;dialog.current?.showModal();let timer:number;
+    scheduleNext.current=()=>{window.clearTimeout(timer);const active=latest.current?.items.some(i=>['queued','running'].includes(i.status));timer=window.setTimeout(()=>void load(false,true),lastError.current?30000:active?5000:60000);};
+    const visible=()=>{if(document.visibilityState==='visible'&&Date.now()-(peekCachedResource<Inbox>('/api/automation/inbox')?.at||0)>15000)void load(true,true);};
+    document.addEventListener('visibilitychange',visible);void load(false,true);
+    return()=>{alive.current=false;window.clearTimeout(timer);scheduleNext.current=()=>{};document.removeEventListener('visibilitychange',visible);};
+  },[]);
+  async function choose(files:FileList|null){
+    if(lock.current||preparing.current)return;preparing.current=true;setPreparingView(true);setError('');setMessage('');const additions:{id:string;file:File;note:string;originalBytes:number}[]=[],errors:string[]=[];
+    try{
+      for(const file of Array.from(files||[])){
+        if(!file.size||file.size>20*1024*1024||! /\.(png|jpe?g|webp)$/i.test(file.name)){errors.push(file.name+'：请选择 20 MB 内的 PNG、JPEG 或 WebP 截图。');continue;}
+        if(pending.length+additions.length>=20){errors.push('每次最多选择 20 张，请分批上传。');break;}
+        try{additions.push({id:crypto.randomUUID(),...await prepareUpload(file)});}
+        catch(e){errors.push(file.name+'：'+(e instanceof Error?e.message:'图片压缩失败。'));}
+      }
+      setPending(previous=>[...previous,...additions]);setError(errors.join(' '));
+    }finally{preparing.current=false;setPreparingView(false);if(input.current)input.current.value='';}
+  }
+  async function refresh(){if(!await load(true,false))throw new Error('收件箱刷新失败，请稍后重试。');await onReload();}
+  async function upload(){if(lock.current||preparing.current||!pending.length)return;lock.current=true;setBusy(true);setError('');setFilter('all');let count=0;
     try{for(const item of pending){
       const contentBase64=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('无法读取 '+item.file.name));reader.readAsDataURL(item.file);});
-      await post('inbox-upload',{operationId:item.id,filename:item.file.name,contentBase64});count++;setPending(previous=>previous.filter(p=>p.id!==item.id));setMessage(`已接收 ${count} / ${pending.length} 张，服务器继续识别，可稍后回来查看。`);
+      await post('inbox-upload',{operationId:item.id,filename:item.file.name,contentBase64,...(item.note?{note:item.note}:{})});count++;setPending(previous=>previous.filter(p=>p.id!==item.id));setMessage(`已接收 ${count} / ${pending.length} 张，服务器继续识别，可稍后回来查看。`);
     }await refresh();}catch(e){setError((e instanceof Error?e.message:'上传失败')+' 未成功的截图仍在待上传列表，可再次提交。');}finally{lock.current=false;setBusy(false);}
   }
   const shown=state?.items.filter(i=>filter==='all'||active(i))||[];
-  return <dialog ref={dialog} className="ai-dialog screenshot-dialog" aria-label="批量截图收件箱" onCancel={event=>{event.preventDefault();if(!lock.current)onClose();}}>
-    <header><h2>批量截图</h2><button type="button" aria-label="关闭截图收件箱" disabled={busy} onClick={onClose}>×</button></header>
-    <p className="screenshot-intro">一次选一批，不用先选费用。匹配明确的自动归档，其余在这里确认。</p>
-    <input className="sr-only" ref={input} type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="选择一批截图" onChange={e=>choose(e.target.files)} disabled={busy}/>
-    <button className="button secondary" disabled={busy} onClick={()=>input.current?.click()}>从相册选择截图</button>
+  return <dialog ref={dialog} className="ai-dialog screenshot-dialog" aria-label="批量截图收件箱" onCancel={event=>{event.preventDefault();if(!lock.current&&!preparing.current)onClose();}}>
+    <header><h2>批量截图</h2><button type="button" aria-label="关闭截图收件箱" disabled={busy||preparingView} onClick={onClose}>×</button></header>
+    <p className="screenshot-intro">一次选一批，不用先选费用。图片在本机压缩，预览确认文字清楚后上传；原图不保存。</p>
+    <input className="sr-only" ref={input} type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="选择一批截图" onChange={e=>void choose(e.target.files)} disabled={busy||preparingView}/>
+    <button className="button secondary" disabled={busy||preparingView} onClick={()=>input.current?.click()}>{preparingView?'正在压缩图片…':'从相册选择截图'}</button>
     {state&&!state.enabled&&<p className="feedback error">请先到首页“AI 设置”配置并启用 DeepSeek。</p>}
-    {!!pending.length&&<div className="screenshot-pending"><strong>待上传 {pending.length} 张</strong>{pending.map(item=><div key={item.id}><AttachmentPreview file={item.file}/><button className="text-button" disabled={busy} onClick={()=>setPending(previous=>previous.filter(p=>p.id!==item.id))}>移除</button></div>)}<button className="button primary" disabled={busy||!state?.enabled} onClick={()=>void upload()}>{busy?'上传中…':`上传并自动匹配（${pending.length}）`}</button></div>}
+    {!!pending.length&&<div className="screenshot-pending"><strong>待上传 {pending.length} 张</strong>{pending.map(item=><div key={item.id}><AttachmentPreview file={item.file}/>{item.note&&<small>已压缩：{Math.round(item.originalBytes/1024)} KB → {Math.round(item.file.size/1024)} KB</small>}<button className="text-button" disabled={busy||preparingView} onClick={()=>setPending(previous=>previous.filter(p=>p.id!==item.id))}>移除</button></div>)}<button className="button primary" disabled={busy||preparingView||!state?.enabled} onClick={()=>void upload()}>{busy?'上传中…':`上传并自动匹配（${pending.length}）`}</button></div>}
     {message&&<p role="status" className="screenshot-intro">{message}</p>}{(error||loadError)&&<p className="feedback error" role="alert">{error||loadError}</p>}
     <div className="ov-filters screenshot-filters" role="group" aria-label="截图筛选"><button className={filter==='pending'?'is-active':''} aria-pressed={filter==='pending'} onClick={()=>setFilter('pending')}>待处理 {state?.items.filter(active).length||0}</button><button className={filter==='all'?'is-active':''} aria-pressed={filter==='all'} onClick={()=>setFilter('all')}>全部 {state?.items.length||0}</button></div>
     {shown.map(item=><InboxItem key={item.id+item.version} item={item} data={data} onRefresh={refresh} onOpen={()=>{if(item.recordID){onClose();onOpenRecord(item.recordID,item.role==='invoice'?'materials':item.role==='purposeEvidence'?'claim':'payment');}}}/>)}

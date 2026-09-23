@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
-import {api} from './api';
+import {api,cachedResource,peekCachedResource} from './api';
 import {AuthenticatedFileLink} from './AuthenticatedFiles';
 import MaterialUpload from './MaterialUpload';
 import type {RecordItem,Workspace} from './types';
@@ -12,19 +12,26 @@ type Purpose={version:string;text:string;sourceMaterialIDs:string[];draft:string
 type AutomationState={settings:{configured:boolean;enabled:boolean;keyHint:string;model:string;revision:string;lastTest?:{ok:boolean;at:string}|null};jobs:Job[];purposes:Record<string,Purpose>};
 const labels:Record<string,string>={queued:'排队中',running:'处理中',matched:'核验通过',mismatch:'字段不符',needs_review:'需人工核对',failed:'处理失败',interrupted:'任务已中断',stale:'内容已变化',completed:'已生成'};
 const fieldLabels:Record<string,string>={merchant:'商户',invoiceNumber:'发票编号',date:'日期',amount:'原币金额',currency:'币种',status:'结算状态',duplicate:'重复凭证'};
-const post=<T,>(action:string,data:object)=>api<T>('/api/automation/'+action,{method:'POST',body:JSON.stringify({...data,operationId:crypto.randomUUID()})});
+const post=<T,>(action:string,data:object)=>api<T>('/api/automation/'+action,{method:'POST',body:JSON.stringify({...data,operationId:crypto.randomUUID()}),...(action==='test'?{signal:AbortSignal.timeout(110000)}:{})});
 const fileHref=(id:string)=>'/api/materials/'+encodeURIComponent(id);
 export function useAutomation(){
-  const [state,setState]=useState<AutomationState|null>(null),[error,setError]=useState('');
-  const [updatedAt,setUpdatedAt]=useState<number|null>(null),[refreshing,setRefreshing]=useState(false);
-  const inFlight=useRef<Promise<AutomationState|null>|null>(null),alive=useRef(true);
-  const refresh=useCallback(()=>{
+  const [state,setState]=useState<AutomationState|null>(()=>peekCachedResource<AutomationState>('/api/automation')?.data||null),[error,setError]=useState('');
+  const [updatedAt,setUpdatedAt]=useState<number|null>(()=>peekCachedResource<AutomationState>('/api/automation')?.at||null),[refreshing,setRefreshing]=useState(false);
+  const inFlight=useRef<Promise<AutomationState|null>|null>(null),alive=useRef(true),latest=useRef(state),lastError=useRef(false),scheduleNext=useRef<()=>void>(()=>{});
+  latest.current=state;
+  const refresh=useCallback((force=true)=>{
     if(inFlight.current)return inFlight.current;
+    if(!force&&document.visibilityState!=='visible'){scheduleNext.current();return Promise.resolve(latest.current);}
     setRefreshing(true);
-    const request=(async()=>{try{const data=await api<AutomationState>('/api/automation',{signal:AbortSignal.timeout(15000)});if(alive.current){setState(data);setError('');setUpdatedAt(Date.now());}return data;}catch(e){if(alive.current)setError(e instanceof Error&&e.name!=='TimeoutError'?e.message:'状态刷新超时，暂时无法确认服务器进度。');return null;}finally{inFlight.current=null;if(alive.current)setRefreshing(false);}})();
+    const request=(async()=>{try{const active=latest.current?.jobs.some(job=>['queued','running'].includes(job.status));const data=await cachedResource<AutomationState>('/api/automation',{force,maxAgeMs:active?5000:60000,timeoutMs:15000});lastError.current=false;latest.current=data;if(alive.current){setState(data);setError('');setUpdatedAt(peekCachedResource<AutomationState>('/api/automation')?.at||Date.now());}return data;}catch(e){lastError.current=true;if(alive.current)setError(e instanceof Error&&e.name!=='TimeoutError'?e.message:'状态刷新超时，暂时无法确认服务器进度。');return null;}finally{inFlight.current=null;if(alive.current){setRefreshing(false);scheduleNext.current();}}})();
     inFlight.current=request;return request;
   },[]);
-  useEffect(()=>{alive.current=true;void refresh();const timer=setInterval(()=>void refresh(),3000);return()=>{alive.current=false;clearInterval(timer);};},[refresh]);
+  useEffect(()=>{alive.current=true;let timer:number;
+    scheduleNext.current=()=>{window.clearTimeout(timer);const active=latest.current?.jobs.some(job=>['queued','running'].includes(job.status));timer=window.setTimeout(()=>void refresh(false),lastError.current?30000:active?5000:60000);};
+    const visible=()=>{if(document.visibilityState==='visible'&&Date.now()-(peekCachedResource<AutomationState>('/api/automation')?.at||0)>15000)void refresh(true);};
+    document.addEventListener('visibilitychange',visible);void refresh(false);
+    return()=>{alive.current=false;window.clearTimeout(timer);scheduleNext.current=()=>{};document.removeEventListener('visibilitychange',visible);};
+  },[refresh]);
   return {state,error,refresh,updatedAt,refreshing};
 }
 function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:ReactNode}){const dialog=useRef<HTMLDialogElement>(null);useEffect(()=>{dialog.current?.showModal();},[]);return <dialog ref={dialog} className="ai-dialog" onCancel={onClose} aria-label={title}><header><h2>{title}</h2><button type="button" aria-label="关闭" onClick={onClose}>×</button></header>{children}</dialog>;}

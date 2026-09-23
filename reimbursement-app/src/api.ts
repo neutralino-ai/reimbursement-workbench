@@ -5,13 +5,54 @@ export const appBase = import.meta.env.BASE_URL.replace(/\/$/, '');
 let endpoint: URL | undefined;
 let configuration: Promise<void> | undefined;
 let memorySession: {token:string; expiresAt:string} | null = null;
+type CacheEntry<T>={at:number;data:T};
+const cachePrefix='reimbursement-cache-v1:';
+const cacheLifetimeMs=30*60*1000;
+const cached=new Map<string,CacheEntry<unknown>>();
+const pending=new Map<string,Promise<unknown>>();
+let cacheGeneration=0;
+
+export function invalidateClientCache(){
+  cacheGeneration++;
+  cached.clear();pending.clear();
+  try{for(let i=sessionStorage.length-1;i>=0;i--){const key=sessionStorage.key(i);if(key?.startsWith(cachePrefix))sessionStorage.removeItem(key);}}catch{}
+}
+function cacheKey(path:string){return cachePrefix+apiAddress()+':'+path;}
+export function peekCachedResource<T>(path:string):CacheEntry<T>|null{
+  if(!endpoint)return null;
+  if(!currentSession())return null;
+  const key=cacheKey(path);
+  let entry=cached.get(key) as CacheEntry<T>|undefined;
+  if(!entry)try{entry=JSON.parse(sessionStorage.getItem(key)||'null') as CacheEntry<T>|undefined;}catch{}
+  if(!entry||!Number.isFinite(entry.at)||entry.at>Date.now()||Date.now()-entry.at>cacheLifetimeMs)return null;
+  cached.set(key,entry);return entry;
+}
+export async function cachedResource<T>(path:string,{maxAgeMs=0,timeoutMs=60000,force=false}:{maxAgeMs?:number;timeoutMs?:number;force?:boolean}={}):Promise<T>{
+  await loadFrontendConfig();
+  const entry=peekCachedResource<T>(path);
+  if(!force&&entry&&Date.now()-entry.at<maxAgeMs)return entry.data;
+  const generation=cacheGeneration,key=cacheKey(path)+':'+generation;
+  let request=pending.get(key) as Promise<T>|undefined;
+  if(!request){
+    request=(async()=>{
+      const data=await api<T>(path,{signal:AbortSignal.timeout(timeoutMs)});
+      if(generation!==cacheGeneration)return cachedResource<T>(path,{timeoutMs,force:true});
+      const next={at:Date.now(),data};cached.set(cacheKey(path),next);
+      try{sessionStorage.setItem(cacheKey(path),JSON.stringify(next));}catch{}
+      return data;
+    })();
+    pending.set(key,request);
+    void request.finally(()=>{if(pending.get(key)===request)pending.delete(key);}).catch(()=>{});
+  }
+  return request;
+}
 
 export function configureAPI(value:string) {
   const next=new URL(value);
   const loopback=next.hostname==='localhost'||next.hostname==='127.0.0.1'||next.hostname==='[::1]';
   if ((next.protocol!=='https:'&&!(next.protocol==='http:'&&loopback))||next.username||next.password||next.search||next.hash||!/^\/[a-zA-Z0-9/_-]*$/.test(next.pathname)) throw new Error('API 地址须为 HTTPS；本机测试可使用 loopback HTTP。');
   next.pathname=next.pathname.replace(/\/$/,'');
-  if(endpoint&&endpoint.href!==next.href)memorySession=null;
+  if(endpoint&&endpoint.href!==next.href){memorySession=null;invalidateClientCache();}
   endpoint=next;
 }
 
@@ -37,9 +78,10 @@ export async function loadFrontendConfig() {
 export function isRemoteAPI() {return Boolean(endpoint&&endpoint.origin!==window.location.origin);}
 export function apiAddress() {return endpoint?.href.replace(/\/$/,'')||'';}
 function sessionKey() {return `reimbursement-session:${apiAddress()}`;}
-export function clearSession() {memorySession=null;try{sessionStorage.removeItem(sessionKey());}catch{}}
+export function clearSession() {memorySession=null;invalidateClientCache();try{sessionStorage.removeItem(sessionKey());}catch{}}
 export function saveSession(token:string,expiresAt:string) {
   if(!/^[a-f0-9]{64}$/.test(token)||!Number.isFinite(Date.parse(expiresAt)))throw new Error('服务器返回了无效的登录会话。');
+  invalidateClientCache();
   memorySession={token,expiresAt};
   try{sessionStorage.setItem(sessionKey(),JSON.stringify(memorySession));}catch{}
 }
@@ -77,6 +119,7 @@ export async function apiFetch(path:string,options:RequestInit={}):Promise<Respo
   try {
     response=await fetch(apiURL(path),{...options,headers,credentials:'omit',redirect:'error',signal:options.signal||AbortSignal.timeout(60000)});
   }catch(error){
+    if(error instanceof Error&&error.name==='TimeoutError')throw new Error('远程 API 响应超时，请稍后刷新状态。');
     if(options.signal?.aborted)throw error;
     throw new Error('无法连接远程 API。请检查接口地址、网络及服务器跨域配置。');
   }
@@ -87,6 +130,7 @@ export async function apiFetch(path:string,options:RequestInit={}):Promise<Respo
     const body=await response.json().catch(()=>null);
     throw new Error(body?.error||`请求失败（${response.status}）`);
   }
+  if(options.method&&options.method.toUpperCase()!=='GET'&&options.method.toUpperCase()!=='HEAD')invalidateClientCache();
   return response;
 }
 

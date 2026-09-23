@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type {Material, RecordItem, Workspace} from './types';
-import {api, isRemoteAPI} from './api';
+import {api, cachedResource, isRemoteAPI, peekCachedResource} from './api';
 import {AuthenticatedFileLink} from './AuthenticatedFiles';
 import WorkflowView from './WorkflowView';
 import {workspaceVendors} from './vendors';
@@ -45,8 +45,8 @@ function Feedback({ error, success }: { error?: string; success?: string }) { re
 function MaterialLink({ material }: { material: Material }) { return <AuthenticatedFileLink className={`material-item ${material.integrity !== 'ok' ? 'material-warning' : ''}`} href={material.href} filename={material.filename}><span className="file-icon"><Icon name="receipt" /></span><span className="file-info"><strong>{material.filename}</strong><small>{roleLabel(material.role)} · {material.integrity === 'ok' ? '文件完整性校验通过' : material.integrity === 'missing' ? '原件缺失' : '原件已变更'}</small></span><Icon name="external" size={15} /></AuthenticatedFileLink>; }
 
 export default function App() {
-  const [data, setData] = useState<Workspace | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<Workspace | null>(()=>peekCachedResource<Workspace>('/api/workspace')?.data||null);
+  const [loading, setLoading] = useState(()=>!peekCachedResource<Workspace>('/api/workspace'));
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedStep, setSelectedStep] = useState<WorkflowStepId | undefined>();
@@ -59,7 +59,7 @@ export default function App() {
   async function reload(): Promise<Workspace> {
     setLoading(true);
     try {
-      const result = await api<Workspace>('/api/workspace');
+      const result = await cachedResource<Workspace>('/api/workspace',{force:true});
       setData(result); setError(''); return result;
     } catch (err) { setError(err instanceof Error ? err.message : '读取数据失败'); throw err; }
     finally { setLoading(false); }
@@ -69,7 +69,11 @@ export default function App() {
     if (menuRef.current) menuRef.current.open = false;
     setSelectedId(null); setUtility(value);
   }
-  useEffect(() => { void reload().catch(() => {}); }, []);
+  useEffect(() => {
+    let active=true;
+    void cachedResource<Workspace>('/api/workspace',{maxAgeMs:30000}).then(next=>{if(active){setData(next);setError('');}}).catch(err=>{if(active)setError(err instanceof Error?err.message:'读取数据失败');}).finally(()=>{if(active)setLoading(false);});
+    return()=>{active=false;};
+  }, []);
   useEffect(() => {
     if (selectedId || utility) return;
     let active = true, inFlight = false;
@@ -77,12 +81,12 @@ export default function App() {
       if (inFlight || document.visibilityState !== 'visible') return;
       inFlight = true;
       try {
-        const next = await api<Workspace>('/api/workspace');
+        const next = await cachedResource<Workspace>('/api/workspace',{maxAgeMs:30000});
         if (active) setData(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
       } catch { /* An explicit refresh displays connection errors. */ }
       finally { inFlight = false; }
     };
-    const timer = window.setInterval(() => void refresh(), 10000);
+    const timer = window.setInterval(() => void refresh(), 60000);
     window.addEventListener('focus', refresh);
     return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); };
   }, [selectedId, utility]);
