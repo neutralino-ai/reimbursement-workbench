@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState,type ReactNode} from 'react';
+import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
 import {api} from './api';
 import {AuthenticatedFileLink} from './AuthenticatedFiles';
 import MaterialUpload from './MaterialUpload';
@@ -16,9 +16,16 @@ const post=<T,>(action:string,data:object)=>api<T>('/api/automation/'+action,{me
 const fileHref=(id:string)=>'/api/materials/'+encodeURIComponent(id);
 export function useAutomation(){
   const [state,setState]=useState<AutomationState|null>(null),[error,setError]=useState('');
-  async function refresh(){try{const data=await api<AutomationState>('/api/automation');setState(data);setError('');return data;}catch(e){setError(e instanceof Error?e.message:'无法读取自动化状态');return null;}}
-  useEffect(()=>{let alive=true,inFlight=false;const poll=async()=>{if(inFlight)return;inFlight=true;try{const data=await api<AutomationState>('/api/automation');if(alive){setState(data);setError('');}}catch(e){if(alive)setError(e instanceof Error?e.message:'读取失败');}finally{inFlight=false;}};void poll();const timer=setInterval(()=>void poll(),3000);return()=>{alive=false;clearInterval(timer);};},[]);
-  return {state,error,refresh};
+  const [updatedAt,setUpdatedAt]=useState<number|null>(null),[refreshing,setRefreshing]=useState(false);
+  const inFlight=useRef<Promise<AutomationState|null>|null>(null),alive=useRef(true);
+  const refresh=useCallback(()=>{
+    if(inFlight.current)return inFlight.current;
+    setRefreshing(true);
+    const request=(async()=>{try{const data=await api<AutomationState>('/api/automation',{signal:AbortSignal.timeout(15000)});if(alive.current){setState(data);setError('');setUpdatedAt(Date.now());}return data;}catch(e){if(alive.current)setError(e instanceof Error&&e.name!=='TimeoutError'?e.message:'状态刷新超时，暂时无法确认服务器进度。');return null;}finally{inFlight.current=null;if(alive.current)setRefreshing(false);}})();
+    inFlight.current=request;return request;
+  },[]);
+  useEffect(()=>{alive.current=true;void refresh();const timer=setInterval(()=>void refresh(),3000);return()=>{alive.current=false;clearInterval(timer);};},[refresh]);
+  return {state,error,refresh,updatedAt,refreshing};
 }
 function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:ReactNode}){const dialog=useRef<HTMLDialogElement>(null);useEffect(()=>{dialog.current?.showModal();},[]);return <dialog ref={dialog} className="ai-dialog" onCancel={onClose} aria-label={title}><header><h2>{title}</h2><button type="button" aria-label="关闭" onClick={onClose}>×</button></header>{children}</dialog>;}
 

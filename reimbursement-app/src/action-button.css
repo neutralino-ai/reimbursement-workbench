@@ -1,0 +1,6 @@
+.action-with-reason{display:inline-flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:100%;vertical-align:top}
+.action-disabled-reason{display:block;max-width:26rem;color:#586579;font-size:13px;line-height:1.5;font-weight:400;white-space:normal;overflow-wrap:anywhere}
+.ai-actions>.action-with-reason{flex:0 1 auto}.batch-content .ai-actions{align-items:flex-start}
+.file-transfer-status{display:inline-block;margin-left:6px;color:#586579;font-size:13px;line-height:1.5}
+.batch-header-actions>.action-with-reason{max-width:180px}.batch-evidence .action-disabled-reason{max-width:18rem}
+@media(max-width:640px){.batch-content .ai-actions>.action-with-reason{width:100%}.batch-content .ai-actions>.action-with-reason>.button{width:100%}}

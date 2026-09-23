@@ -1,6 +1,7 @@
-import {useEffect, useRef, useState, type AnchorHTMLAttributes, type ImgHTMLAttributes, type MouseEvent} from 'react';
+import {useEffect, useId, useRef, useState, type AnchorHTMLAttributes, type ImgHTMLAttributes, type MouseEvent} from 'react';
 import {apiFetch} from './api';
 import {isIOS,presentMobileFile} from './mobile';
+import './action-button.css';
 
 type FileLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href' | 'download' | 'onClick' | 'target' | 'rel'> & {
   href: string;
@@ -27,6 +28,8 @@ function responseFilename(response: Response): string | undefined {
 
 export function AuthenticatedFileLink({href, filename, download, children, ...props}: FileLinkProps) {
   const [busy, setBusy] = useState(false);
+  const [activity,setActivity]=useState('');
+  const activityID=useId();
   const [error, setError] = useState('');
   const active = useRef(false);
   const requests = useRef(new Set<AbortController>());
@@ -60,7 +63,7 @@ export function AuthenticatedFileLink({href, filename, download, children, ...pr
     if (requests.current.size) return;
     const controller = new AbortController();
     requests.current.add(controller);
-    setBusy(true); setError('');
+    setBusy(true); setError('');setActivity('正在下载附件，请稍候…');
     const isDownload = download !== undefined && download !== false;
     let popup: Window | null = null;
     let objectURL: string | undefined;
@@ -80,6 +83,7 @@ export function AuthenticatedFileLink({href, filename, download, children, ...pr
       const response = await apiFetch(path, {signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)])});
       const blob = await checkedBlob(response);
       if (controller.signal.aborted || !active.current) return;
+      setActivity(isDownload?'正在准备保存文件，请稍候…':'正在打开附件预览，请稍候…');
       if (isIOS()) {
         const nativeName = typeof download === 'string' && download || filename || responseFilename(response) || (blob.type === 'application/pdf' ? '附件.pdf' : '附件');
         await presentMobileFile(blob, nativeName, isDownload);
@@ -120,7 +124,7 @@ export function AuthenticatedFileLink({href, filename, download, children, ...pr
     }
   }
 
-  return <><a {...props} href="#" rel="noopener noreferrer" aria-busy={busy} aria-disabled={busy} onClick={event => void openFile(event)} onAuxClick={event => { if (event.button === 1) void openFile(event); }}>{children}</a>{error && <span className="feedback error" role="alert">{error}</span>}</>;
+  return <><a {...props} href="#" rel="noopener noreferrer" aria-busy={busy} aria-disabled={busy} aria-describedby={[props['aria-describedby'],busy?activityID:undefined].filter(Boolean).join(' ')||undefined} onClick={event => void openFile(event)} onAuxClick={event => { if (event.button === 1) void openFile(event); }}>{children}{busy&&<span id={activityID} className="file-transfer-status" role="status">{activity}</span>}</a>{error && <span className="feedback error" role="alert">{error}</span>}</>;
 }
 
 type ImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'srcSet'> & {src: string};
