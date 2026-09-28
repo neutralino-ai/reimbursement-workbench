@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {batchAmounts,activeBatches,preparingBatches,batchListEntries,lockedForBatch,batchTitle,batchStage,canSelectForBatch} from '../src/claim-batches.ts';
+import {batchAmounts,activeBatches,preparingBatches,lockedForBatch,batchTitle,batchStage,canSelectForBatch} from '../src/claim-batches.ts';
 const expense=(id,changes={})=>({id,amount:'200.00',currency:'USD',date:'2026-05-25',billingMonth:'2026-05',exchangeRate:{valid:true,cnyAmount:'1400.01'},...changes});
 test('sum per-invoice rounded CNY, never reuse one FX rate for the whole USD total',()=>{
   const result=batchAmounts([expense('a'),expense('b',{exchangeRate:{valid:true,cnyAmount:'1420.02'}})]);assert.equal(result.totalCNY,'2820.03');assert.equal(result.overLimit,false);
@@ -45,14 +45,6 @@ test('different per-record documents do not complete the shared package; archive
   data.documents=[{...doc,id:'doc-a',recordIDs:['a']},{...doc,id:'doc-b',recordIDs:['b']}];
   assert.equal(preparingBatches(data).length,1);
   data.claimBatches[0].status='archived';assert.deepEqual(preparingBatches(data),[]);
-});
-test('finished batches occupy one normal row without losing unrelated expenses or filtered matches',()=>{
-  const data=preparedBatch(),[a,b]=data.records,other=expense('other');
-  const entries=batchListEntries([b,other,a],data.claimBatches);
-  assert.deepEqual(entries,[{batch:data.claimBatches[0]},{record:other}]);
-  assert.deepEqual(batchListEntries([a],data.claimBatches),[{batch:data.claimBatches[0]}],'search matching one month still finds the combined row');
-  assert.deepEqual(batchListEntries([other],data.claimBatches),[{record:other}]);
-  assert.deepEqual(batchListEntries(data.records,[]),data.records.map(record=>({record})),'preparation records remain available individually');
 });
 test('missing/invalid FX blocks totals; exact limit and one cent over are distinguished',()=>{
   assert.equal(batchAmounts([expense('a',{exchangeRate:{valid:false,cnyAmount:'100'}}),expense('b')]).total,null);

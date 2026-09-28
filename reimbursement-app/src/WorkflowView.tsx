@@ -3,11 +3,11 @@ import {api,apiAddress} from './api';
 import VendorBadge,{vendorLabel} from './VendorBadge';
 import ScreenshotInboxButton from './ScreenshotInbox';
 import {AuthenticatedFileLink} from './AuthenticatedFiles';
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import BatchEditor from './BatchEditor';
 import BatchZipAction from './BatchZipAction';
 import ActionButton from './ActionButton';
-import {activeBatches,preparingBatches,batchListEntries,batchAmounts,batchTitle,batchStage,canSelectForBatch,lockedForBatch} from './claim-batches';
+import {activeBatches,preparingBatches,batchAmounts,batchTitle,batchStage,canSelectForBatch,lockedForBatch,type BatchStage} from './claim-batches';
 import {listBatchDrafts,type BatchLocalDraft} from './batch-local-draft';
 import type { DeliveryStatus, Material, RecordItem, Workspace } from './types';
 import { applicationDocuments, arePriorStepsComplete, cny, deliveryFiles, getExchangeRateEvidence, getRecordWorkflow, isFinanceCompleted, sortWorkflowRecords, sourceFreshness, validMaterials, type DeliveryFile, type WorkflowStepId } from './workflow';
@@ -17,7 +17,9 @@ import {mobileNextAction, matchesProgress, progressFilters, type ProgressFilter}
 
 type Props = { data: Workspace; onOpenRecord: (id: string, step: WorkflowStepId) => void; onOpenMaterials: () => void; onOpenARP: () => void; onReload: () => Promise<unknown> };
 type CellModel = { done: boolean; title: string; detail: string; link?: { material: Material; label: string } };
+type MergeEntry = {key:string;stage:BatchStage;record:RecordItem;batch?:never;status?:never}|{key:string;stage:BatchStage;batch:NonNullable<Workspace['claimBatches']>[number];status:ReturnType<typeof batchStage>;record?:never};
 const columns: { id: WorkflowStepId; title: string }[] = [{ id: 'materials', title: '原始材料' }, { id: 'payment', title: '实付款' }, { id: 'claim', title: '申报材料' }, { id: 'submission', title: '交财务' }, { id: 'approval', title: '财务审核' }];
+const mergeStages = ['未达合并条件', '可选择合并', '准备合并材料', '材料确认，可下载 ZIP', '材料已提交', '财务审批完全通过'] as const;
 const deliveryLabels: Record<DeliveryStatus, string> = { unknown: '待确认', submitted: '已交', not_submitted: '未交' };
 const monthLabel = (value: string) => /^\d{4}-\d{2}$/.test(value) ? `${value.slice(0, 4)} 年 ${Number(value.slice(5))} 月` : value || '月份待确认';
 const shortMonth = (value: string) => /^\d{4}-\d{2}$/.test(value) ? `${Number(value.slice(5))} 月` : value;
@@ -57,13 +59,12 @@ function cellModel(record: RecordItem, id: WorkflowStepId, data: Workspace, sour
 
 export default function WorkflowView({ data, onOpenRecord, onReload }: Props) {
   const [selected,setSelected]=useState<string[]>([]);
-  const [mobileSelecting,setMobileSelecting]=useState(false);
-  const [expanded,setExpanded]=useState<string[]>([]);
+  const [mergeFilter,setMergeFilter]=useState<BatchStage|'all'>('all');
   const [editor,setEditor]=useState<{recordIDs:string[];batchID?:string}|null>(null);
   const [localDrafts,setLocalDrafts]=useState<BatchLocalDraft[]>([]);
   useEffect(()=>{const read=()=>{try{setLocalDrafts(listBatchDrafts(localStorage,apiAddress()));}catch{setLocalDrafts([]);}};read();window.addEventListener('storage',read);window.addEventListener('reimbursement-batch-draft',read);return()=>{window.removeEventListener('storage',read);window.removeEventListener('reimbursement-batch-draft',read);};},[]);
   const batches=activeBatches(data),grouped=new Set(batches.flatMap(b=>b.recordIDs));
-  const preparing=preparingBatches(data),preparingIDs=new Set(preparing.map(b=>b.id)),preparingRecords=new Set(preparing.flatMap(b=>b.recordIDs));
+  const preparing=preparingBatches(data),preparingIDs=new Set(preparing.map(b=>b.id));
   const ungrouped=data.records.filter(record=>!grouped.has(record.id)&&!lockedForBatch(record,data));
   const eligible=ungrouped.filter(record=>canSelectForBatch(record,data));
   const notEligible=ungrouped.filter(record=>!canSelectForBatch(record,data));
@@ -73,7 +74,7 @@ export default function WorkflowView({ data, onOpenRecord, onReload }: Props) {
   const [search, setSearch] = useState('');
   const [freshDays, setFreshDays] = useState(() => { try { const value = Number(localStorage.getItem('reimbursement.sourceFreshDays')); return Number.isInteger(value) && value >= 1 && value <= 365 ? value : 7; } catch { return 7; } });
   const sources = data.sources.filter(source => data.records.some(record => record.vendor === source.id));
-  const sorted = sortWorkflowRecords(data.records);
+  const sorted = sortWorkflowRecords(data.records.filter(record=>!grouped.has(record.id)));
   const completed = sorted.filter(isFinanceCompleted).length;
   const query = search.trim().toLowerCase();
   const rows = sorted.map(record => {
@@ -84,62 +85,79 @@ export default function WorkflowView({ data, onOpenRecord, onReload }: Props) {
   });
   const stageFilter = columns.find(column => column.id === filter);
   const visible = rows.filter(({ record, currentStage }) => (filter === 'all' || (filter === 'completed' ? isFinanceCompleted(record) : filter === 'pending' ? !isFinanceCompleted(record) : currentStage === filter)) && matchesProgress(record, data, progress) && `${record.billingMonth} ${record.date} ${record.invoiceNumber} ${record.accountName} ${record.submissionReference} ${vendorLabel(record.vendor)} ${record.plan} ${purchaseTypeLabel(record.plan)} ${record.vendor==='claude'?'anthropic':record.vendor==='chatgpt'?'openai gpt':''}`.toLowerCase().includes(query));
-  const finished=batches.filter(b=>!preparingIDs.has(b.id));
-  const desktopEntries=batchListEntries(visible.filter(row=>!preparingRecords.has(row.record.id)).map(row=>row.record),finished);
-  const mobileEntries=batchListEntries(visible.map(row=>row.record),finished);
+  const mergeEntries:MergeEntry[] = [
+    ...sortWorkflowRecords(notEligible).map(record=>({key:record.id,stage:1 as BatchStage,record})),
+    ...sortWorkflowRecords(eligible).map(record=>({key:record.id,stage:2 as BatchStage,record})),
+    ...stagedBatches.map(({batch,status})=>({key:batch.id,stage:status.stage,batch,status})),
+  ].sort((left,right)=>left.stage-right.stage);
+  const visibleMergeEntries=mergeEntries.filter(entry=>mergeFilter==='all'||entry.stage===mergeFilter);
+  const mergeCounts=mergeStages.map((_,index)=>mergeEntries.filter(entry=>entry.stage===index+1).length);
   const counts = columns.map((_, index) => rows.filter(row => row.cells[index].done).length);
   const stageCounts = columns.map(column => rows.filter(row => row.currentStage === column.id).length);
   function toggleStage(stage: WorkflowStepId) { setFilter(current => current === stage ? 'all' : stage); setProgress('all'); }
   function clearStage() { setFilter('all'); setProgress('all'); }
   const chosen=data.records.filter(r=>selected.includes(r.id)&&!grouped.has(r.id)&&canSelectForBatch(r,data));
   const selectedAmounts=batchAmounts(chosen);
-  function renderRow({record,cells}:typeof rows[number]) {return <tr key={record.id} className={isFinanceCompleted(record)?'ov-reimbursed':''}>
-    <th scope="row" className="ov-identity"><VendorBadge vendor={record.vendor} plan={record.plan}/><div className="ov-identity-top">{!grouped.has(record.id)&&canSelectForBatch(record,data)&&<input className="ov-batch-select" type="checkbox" aria-label={'选择合并 '+record.billingMonth+' '+record.invoiceNumber} checked={selected.includes(record.id)} onChange={e=>setSelected(ids=>e.target.checked?[...ids,record.id]:ids.filter(id=>id!==record.id))}/>}<strong title={`发票日期 ${record.date}`}>{monthLabel(record.billingMonth)}</strong><span>{amount(record)}</span></div><span className="ov-invoice" title={record.invoiceNumber}>{record.invoiceNumber||'发票编号待补充'}</span></th>
-    {cells.map((cell,index)=><td key={columns[index].id} onClick={event=>{if(!(event.target as Element).closest('button, a'))onOpenRecord(record.id,columns[index].id);}}><div className="ov-cell"><button className={`ov-cell-button ${cell.done?'is-done':'is-pending'}`} onClick={()=>onOpenRecord(record.id,columns[index].id)} aria-label={`${monthLabel(record.billingMonth)}，${columns[index].title}：${cell.title}，${cell.detail}`}><span className="ov-cell-title"><Mark done={cell.done}/><strong>{cell.title}</strong></span><span className="ov-cell-detail">{cell.detail}</span></button>{cell.link&&<div className="ov-cell-file"><FileLink material={cell.link.material}>{cell.link.label}</FileLink></div>}</div></td>)}
-  </tr>;}
   function changePeriod(raw: string) { const value = Number(raw); if (!Number.isInteger(value) || value < 1 || value > 365) return; setFreshDays(value); try { localStorage.setItem('reimbursement.sourceFreshDays', String(value)); } catch { /* The setting remains valid for this view. */ } }
-  function renderFinishedBatch(batch:NonNullable<Workspace['claimBatches']>[number],mobile:boolean){
-    const members=sorted.filter(r=>batch.recordIDs.includes(r.id)),totals=batchAmounts(members),open=expanded.includes(batch.id);
-    const status=batchStage(batch,data);
-    const pdf=status.document?.materials.find(material=>material.id===status.document?.submissionPDFMaterialID);
-    return <Fragment key={batch.id}><tr className={`ov-completed-batch${status.stage===6?' ov-reimbursed':''}`}><td colSpan={mobile?2:6}><div className="ov-batch-header"><strong>合并报销 · {batchTitle(members)}</strong><span>{totals.totalCNY?'¥'+totals.totalCNY:'人民币待核对'}</span><span>第 {status.stage} / 6 步 · {status.label}</span><button className="button secondary small" aria-expanded={open} onClick={()=>setExpanded(ids=>ids.includes(batch.id)?ids.filter(id=>id!==batch.id):[...ids,batch.id])}>{open?'收起明细':`查看 ${members.length} 笔明细`}</button>{pdf&&<FileLink material={pdf}>报销说明 PDF</FileLink>}</div></td></tr>{open&&members.map(record=>mobile?<tr key={record.id}><td colSpan={2}><button className="ov-mobile-action" onClick={()=>onOpenRecord(record.id,mobileNextAction(record,data).step)}><strong>{record.billingMonth} · {record.invoiceNumber}</strong><span>{amount(record)} · {mobileNextAction(record,data).title}</span></button></td></tr>:renderRow(rows.find(row=>row.record.id===record.id)!))}</Fragment>;
+  function renderMergeRow(entry:MergeEntry) {
+    const {record,batch,status}=entry;
+    const members=batch?data.records.filter(item=>batch.recordIDs.includes(item.id)):[];
+    const totals=batch?batchAmounts(members):null;
+    const pdf=status?.document?.materials.find(material=>material.id===status.document?.submissionPDFMaterialID);
+    const next=record?mobileNextAction(record,data):null;
+    return <tr key={entry.key} className={entry.stage===6?'is-complete':''}>
+      <th scope="row" className="ov-merge-identity">
+        {record?<><VendorBadge vendor={record.vendor} plan={record.plan}/><strong>{monthLabel(record.billingMonth)}</strong><span>{amount(record)} · {record.invoiceNumber||'发票编号待补充'}</span></>:<><strong>{batchTitle(members)}</strong><span>{members.length} 笔 · {totals?.totalCNY?`¥${totals.totalCNY}`:'人民币待核对'}</span></>}
+      </th>
+      {mergeStages.map((label,index)=>{
+        const stage=index+1;
+        if(stage<entry.stage)return <td key={label} className="ov-merge-past"><Mark done/><span>已完成</span></td>;
+        if(stage>entry.stage)return <td key={label} className="ov-merge-future"><span aria-label="尚未到达">—</span></td>;
+        return <td key={label} className="ov-merge-current"><strong>{status?.label||label}</strong>
+          {record&&stage===1&&<small>尚未达到共同申请条件，或暂无可配对费用。</small>}
+          {record&&stage===1&&next&&<button className="ov-merge-record-action" onClick={()=>onOpenRecord(record.id,next.step)}>{next.title} <span aria-hidden="true">›</span></button>}
+          {record&&stage===2&&<label className="ov-merge-pick"><input type="checkbox" aria-label={`选择合并 ${record.billingMonth} ${record.invoiceNumber}`} checked={selected.includes(record.id)} onChange={event=>setSelected(ids=>event.target.checked?[...ids,record.id]:ids.filter(id=>id!==record.id))}/>选择此笔</label>}
+          {status&&<small>{status.detail}</small>}
+          {batch&&status?.stage===3&&!members.some(item=>lockedForBatch(item,data))&&<button className="button secondary small" onClick={()=>setEditor({recordIDs:batch.recordIDs,batchID:batch.id})}>准备合并材料</button>}
+          {pdf&&<FileLink material={pdf}>报销说明 PDF</FileLink>}
+          {status?.stage===4&&status.document&&<BatchZipAction key={status.document.id} document={status.document}/>}
+        </td>;
+      })}
+    </tr>;
+  }
+  function renderSingleRow({record,cells}:typeof rows[number]) {
+    const next=mobileNextAction(record,data);
+    const action=stageFilter?{...next,step:stageFilter.id,title:cells[columns.findIndex(column=>column.id===stageFilter.id)].title}:progress==='missing-payment'||progress==='verify-payment'?{...next,step:'payment' as const,title:progress==='missing-payment'?'补付款凭证':'核验付款'}:next;
+    const index=columns.findIndex(column=>column.id===action.step),cell=cells[index];
+    return <tr key={record.id} className={action.completed?'is-complete':''}><td>
+      <button className="ov-single-action" onClick={()=>onOpenRecord(record.id,action.step)} aria-label={`${monthLabel(record.billingMonth)} ${amount(record)}，${action.title}，查看单笔详情`}>
+        <div className="ov-single-main"><VendorBadge vendor={record.vendor} plan={record.plan}/><strong>{monthLabel(record.billingMonth)}</strong><span>{amount(record)}</span></div>
+        <div className="ov-single-progress"><span>{action.completed?'5 / 5 已完成':`第 ${index+1} / 5 步 · ${columns[index].title}`}</span><strong>{action.title}</strong><small>{cell.detail}</small></div><span className="ov-single-arrow" aria-hidden="true">›</span>
+      </button>
+      {cell.link&&<div className="ov-single-file"><FileLink material={cell.link.material}>{cell.link.label}</FileLink></div>}
+    </td></tr>;
   }
 
   return <section className="reimbursement-overview" aria-label="费用报销总览">
-    <section className="ov-merge-panel" aria-label="合并报销进度"><h2>合并报销</h2><p>按材料和财务记录显示进度；选择至少两笔符合条件的费用后，可开始准备共同申请理由。</p>
-      <div className="ov-merge-stages" aria-label="合并报销六种状态">{['未达合并条件','可选择合并','准备合并材料','材料确认，可下载 ZIP','材料已提交','财务审批完全通过'].map((label,index)=><span key={label}><b>{index+1}</b>{label}<small>{index===0?notEligible.length:index===1?eligible.length:stagedBatches.filter(item=>item.status.stage===index+1).length}{index<2?' 笔':' 组'}</small></span>)}</div>
-      {notEligible.length>0&&<details className="ov-merge-candidates"><summary>第 1 步 · 未达合并条件（{notEligible.length} 笔）</summary><p>可能尚未到准备科研理由材料，或缺有效汇率、可配对费用。</p><div>{notEligible.map(record=><span key={record.id}>{monthLabel(record.billingMonth)} · {vendorLabel(record.vendor)} · {amount(record)}</span>)}</div></details>}
-      {eligible.length>0&&<div className="ov-merge-candidates"><strong>第 2 步 · 已达到合并条件，尚未合并</strong><div>{eligible.map(record=><label key={record.id}><input type="checkbox" checked={selected.includes(record.id)} onChange={event=>setSelected(ids=>event.target.checked?[...ids,record.id]:ids.filter(id=>id!==record.id))}/>{monthLabel(record.billingMonth)} · {vendorLabel(record.vendor)} · {amount(record)}</label>)}</div></div>}
-      {stagedBatches.map(({batch,status})=>{const members=data.records.filter(record=>batch.recordIDs.includes(record.id));const pdf=status.document?.materials.find(material=>material.id===status.document?.submissionPDFMaterialID);return <div className="ov-merge-card" key={batch.id}><div><strong>第 {status.stage} / 6 步 · {status.label}</strong><span>{batchTitle(members)} · {members.length} 笔</span><small>{status.detail}</small></div><div className="ov-merge-actions">{status.stage===3&&!members.some(record=>lockedForBatch(record,data))&&<button className="button secondary small" onClick={()=>setEditor({recordIDs:batch.recordIDs,batchID:batch.id})}>准备合并材料</button>}{pdf&&<FileLink material={pdf}>报销说明 PDF</FileLink>}{status.stage===4&&status.document&&<BatchZipAction key={status.document.id} document={status.document}/>}</div></div>;})}
+    <section className="ov-merge-panel" aria-label="合并报销进度"><h2>合并报销</h2><p>每行是一笔待合并费用或一组合并报销；列表示六个进度。点上方统计可只看该状态。</p>
+      <div className="ov-merge-stages" role="group" aria-label="筛选合并报销状态">{mergeStages.map((label,index)=>{const stage=(index+1) as BatchStage;return <button type="button" key={label} className={mergeFilter===stage?'is-active':''} aria-pressed={mergeFilter===stage} onClick={()=>setMergeFilter(current=>current===stage?'all':stage)}><b>{index+1}</b><span>{label}</span><small>{mergeCounts[index]}{index<2?' 笔':' 组'}</small></button>;})}</div>
+      {mergeFilter!=='all'&&<div className="ov-merge-filter-state" role="status">正在查看：{mergeStages[mergeFilter-1]} · {visibleMergeEntries.length}{mergeFilter<3?' 笔':' 组'} <button className="text-button" onClick={()=>setMergeFilter('all')}>显示全部</button></div>}
+      <div className="ov-merge-scroll" tabIndex={0} aria-label="合并报销六阶段表格，可横向滚动"><table className="ov-merge-table"><colgroup><col className="ov-merge-identity-width"/>{mergeStages.map(label=><col key={label}/>)}</colgroup><thead><tr><th scope="col">费用 / 合并组</th>{mergeStages.map((label,index)=><th key={label} scope="col"><span>{index+1}</span>{label}</th>)}</tr></thead><tbody>{visibleMergeEntries.map(renderMergeRow)}</tbody></table>{!visibleMergeEntries.length&&<div className="ov-empty">{mergeEntries.length?'该状态暂无记录。':'暂无合并报销记录。'}</div>}</div>
+      {localDrafts.filter(d=>(!batches.some(b=>b.id===d.id)||preparingIDs.has(d.id))&&d.recordIDs.length>=2&&d.recordIDs.every(id=>data.records.some(r=>r.id===id&&!lockedForBatch(r,data)))&&!data.claimBatches?.some(b=>b.recordIDs.some(id=>d.recordIDs.includes(id))&&(b.id!==d.id||b.status==='archived'))).map(d=><div className="ov-batch-toolbar" key={d.id}><span>本机暂存 · {d.recordIDs.length} 笔 · {new Date(d.savedAt).toLocaleString()}</span><button className="button secondary small" onClick={()=>setEditor({recordIDs:d.recordIDs,batchID:batches.find(b=>b.id===d.id)?.id})}>打开本机暂存</button></div>)}
+      <div className="ov-batch-toolbar"><span>{chosen.length?`已选 ${chosen.length} 笔 · ${selectedAmounts.totalCNY?'¥'+selectedAmounts.totalCNY:'待补汇率'}`:'在第 2 列勾选 2–10 笔可合并费用'}</span><ActionButton className="button primary small" reason={chosen.length<2?'请先勾选至少 2 笔可合并的费用。':chosen.length>10?'一次最多合并 10 笔费用，请减少选择。':selectedAmounts.overLimit?'所选费用合计超过 ¥4,000.00，请减少选择。':''} onClick={()=>{setEditor({recordIDs:chosen.map(r=>r.id)});setSelected([]);}}>合并准备材料{chosen.length?`（${chosen.length}）`:''}</ActionButton>{chosen.length>0&&<button className="text-button" onClick={()=>setSelected([])}>取消选择</button>}</div>
     </section>
-    {localDrafts.filter(d=>(!batches.some(b=>b.id===d.id)||preparingIDs.has(d.id))&&d.recordIDs.length>=2&&d.recordIDs.every(id=>data.records.some(r=>r.id===id&&!lockedForBatch(r,data)))&&!data.claimBatches?.some(b=>b.recordIDs.some(id=>d.recordIDs.includes(id))&&(b.id!==d.id||b.status==='archived'))).map(d=><div className="ov-batch-toolbar" key={d.id}><span>本机暂存 · {d.recordIDs.length} 笔 · {new Date(d.savedAt).toLocaleString()}</span><button className="button secondary small" onClick={()=>setEditor({recordIDs:d.recordIDs,batchID:batches.find(b=>b.id===d.id)?.id})}>打开本机暂存</button></div>)}
-    <div className={`ov-batch-toolbar ${mobileSelecting?'is-selecting':''}`}><span>{chosen.length?`已选 ${chosen.length} 笔 · ${selectedAmounts.totalCNY?'¥'+selectedAmounts.totalCNY:'待补汇率'}`:'勾选 2–10 笔已到准备科研理由材料阶段的费用'}</span><ActionButton className="button primary small" reason={chosen.length<2?'请先勾选至少 2 笔可合并的费用。':chosen.length>10?'一次最多合并 10 笔费用，请减少选择。':selectedAmounts.overLimit?'所选费用合计超过 ¥4,000.00，请减少选择。':''} onClick={()=>{setEditor({recordIDs:chosen.map(r=>r.id)});setSelected([]);setMobileSelecting(false);}}>合并准备材料{chosen.length?`（${chosen.length}）`:''}</ActionButton>{chosen.length>0&&<button className="text-button" onClick={()=>setSelected([])}>取消选择</button>}</div>
     {editor&&<BatchEditor key={editor.batchID||editor.recordIDs.join(':')} data={data} recordIDs={editor.recordIDs} batch={batches.find(b=>b.id===editor.batchID)} onReload={onReload} onClose={()=>setEditor(null)} delivery={<DeliveryPanel data={data} onReload={onReload} recordIDs={editor.recordIDs}/>}/>}
-    <ScreenshotInboxButton data={data} onReload={onReload} onOpenRecord={onOpenRecord}/><div className="ov-toolbar"><div className="ov-filters" role="group" aria-label="费用筛选">{([['all', '全部', sorted.length], ['pending', '待处理', sorted.length - completed], ['completed', '已报销', completed]] as const).map(([value, label, count]) => <button key={value} className={filter === value ? 'is-active' : ''} aria-pressed={filter === value} onClick={() => {setFilter(value);setProgress('all');}}>{label}<span>{count}</span></button>)}</div><div className="ov-search-tools"><label className="ov-progress-filter"><span className="sr-only">按进度筛选</span><select aria-label="按进度筛选" value={progress} onChange={event=>{setProgress(event.target.value as ProgressFilter);setFilter('all');}}>{progressFilters.map(([value,label])=><option key={value} value={value}>{label} ({sorted.filter(record=>matchesProgress(record,data,value)).length})</option>)}</select></label><label className="ov-search"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.8" stroke="currentColor" strokeWidth="1.3" /><path d="m13 13 4.2 4.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg><input aria-label="搜索服务、月份或账号" placeholder="搜索服务、月份或账号" value={search} onChange={event => setSearch(event.target.value)} /></label></div></div>
-    {stageFilter && <div className="ov-stage-summary"><span role="status">当前筛选：卡在“{stageFilter.title}” · {visible.length} 笔（前序已完成，本步待完成）</span><button type="button" className="text-button" onClick={clearStage}>取消阶段筛选</button></div>}
-    <div className="ov-mobile">
-      <div className="ov-mobile-summary" role="group" aria-label="按当前阶段筛选">{columns.map((column,index)=><button type="button" key={column.id} className={filter===column.id?'is-active':''} aria-pressed={filter===column.id} aria-label={`${column.title}：已完成 ${counts[index]} / ${sorted.length} 笔，筛选卡在此阶段的 ${stageCounts[index]} 笔`} onClick={()=>toggleStage(column.id)}><span>{column.title}</span><strong>{counts[index]}<small>/{sorted.length}</small></strong><span>待办 {stageCounts[index]}</span></button>)}</div>
-      <div className="ov-mobile-heading"><button type="button" className="text-button" aria-label="费用：显示全部阶段，按发票日期排序" onClick={clearStage}>费用 <small>最新在前 · 全部阶段</small></button><button className="text-button" aria-pressed={mobileSelecting} onClick={()=>{setMobileSelecting(value=>!value);setSelected([]);}}>{mobileSelecting?'完成选择':'合并材料'}</button></div>
-      <table className="ov-mobile-table"><colgroup><col className="ov-mobile-identity-width"/><col/></colgroup><thead><tr><th scope="col">日期 / 金额</th><th scope="col">当前进度</th></tr></thead><tbody>{mobileEntries.map(entry=>{
-        if(entry.batch)return renderFinishedBatch(entry.batch,true);
-        const {record,cells}=rows.find(row=>row.record.id===entry.record.id)!;
-        const next=mobileNextAction(record,data);
-        const action=stageFilter?{...next,step:stageFilter.id,title:cells[columns.findIndex(column=>column.id===stageFilter.id)].title}:progress==='missing-payment'||progress==='verify-payment'?{...next,step:'payment' as const,title:progress==='missing-payment'?'补付款凭证':'核验付款'}:next;
-        const index=columns.findIndex(column=>column.id===action.step),cell=cells[index];
-        const batch=preparing.find(item=>item.recordIDs.includes(record.id));
-        return <tr key={record.id} className={action.completed?'is-complete':''}>
-           <th scope="row"><div className="ov-mobile-identity"><VendorBadge vendor={record.vendor} plan={record.plan}/>{mobileSelecting&&!grouped.has(record.id)&&canSelectForBatch(record,data)&&<label className="ov-mobile-select"><input type="checkbox" aria-label={'选择合并 '+record.billingMonth+' '+record.invoiceNumber} checked={selected.includes(record.id)} onChange={event=>setSelected(ids=>event.target.checked?[...ids,record.id]:ids.filter(id=>id!==record.id))}/>选择</label>}<time dateTime={record.date}>{record.date||record.billingMonth}</time><strong>{amount(record)}</strong><span title={`${record.accountName} ${record.plan}`}>{record.accountName||record.vendor} {record.plan}</span></div></th>
-          <td><button className={`ov-mobile-action ${action.completed?'is-done':action.waiting?'is-waiting':''}`} onClick={()=>onOpenRecord(record.id,action.step)} aria-label={`${record.date} ${amount(record)}，${action.title}，查看详情`}><span className="ov-mobile-action-top"><span>{action.completed?'5 / 5 已完成':`第 ${index+1} / 5 步 · ${columns[index].title}`}</span><span aria-hidden="true">›</span></span><strong>{action.title}</strong><span className="ov-mobile-detail">{cell.detail}</span></button>{batch&&<button className="ov-mobile-batch" onClick={()=>setEditor({recordIDs:batch.recordIDs,batchID:batch.id})}>合并包 · {batch.recordIDs.length} 笔 <span aria-hidden="true">›</span></button>}</td>
-        </tr>;
-      })}</tbody></table>
-      {!visible.length&&<div className="ov-empty">{sorted.length?'没有符合条件的费用':'当前范围没有费用记录'}</div>}
-    </div>
-    <div className="ov-table-frame"><div className="ov-table-scroll ov-desktop" tabIndex={0} aria-label="费用与五个报销流程，可横向滚动"><table className="ov-table"><colgroup><col className="ov-identity-width" />{columns.map(column => <col key={column.id} />)}</colgroup><thead><tr><th scope="col" className="ov-identity"><button type="button" className="ov-stage-button" aria-label="费用：显示全部阶段，按发票日期排序" aria-pressed={filter === 'all' && progress === 'all'} onClick={clearStage}><span className="ov-column-title">费用</span><span className="ov-column-meta">按发票日期排序</span><span className="ov-stage-hint">显示全部阶段</span></button></th>{columns.map((column, index) => <th key={column.id} scope="col"><button type="button" className={`ov-stage-button ${filter === column.id ? 'is-active' : ''}`} aria-pressed={filter === column.id} aria-label={`${column.title}：已完成 ${counts[index]} / ${sorted.length} 笔，筛选卡在此阶段的 ${stageCounts[index]} 笔`} onClick={() => toggleStage(column.id)}><span className="ov-column-count"><b>{counts[index]}</b><span>/ {sorted.length} 已完成</span></span><span className="ov-column-title">{column.title}</span><span className="ov-stage-hint">卡在此步 {stageCounts[index]} 笔{filter === column.id ? ' · 再点取消' : ' · 点击筛选'}</span></button></th>)}</tr></thead><tbody>{preparing.filter(b=>visible.some(row=>b.recordIDs.includes(row.record.id))).map(batch=>{
-      const members=data.records.filter(r=>batch.recordIDs.includes(r.id)),totals=batchAmounts(members),open=expanded.includes(batch.id)||!!query||!!stageFilter;
-      const docs=(data.documents||[]).filter(d=>d.batchID===batch.id),ready=docs.find(d=>d.ready&&!d.stale),latest=ready||docs[0];
-      const pdf=latest?.materials.find(m=>m.id===latest.submissionPDFMaterialID);
-      return <Fragment key={batch.id}><tr className="ov-batch-row"><td colSpan={6}><div className="ov-batch-header"><button className="text-button" aria-expanded={open} onClick={()=>setExpanded(ids=>ids.includes(batch.id)?ids.filter(id=>id!==batch.id):[...ids,batch.id])}>{open?'收起':'展开'} {members.length} 笔</button><strong>{vendorLabel(members[0]?.vendor||'')} 合并准备 · {batchTitle(members)}</strong><span>{totals.totalCNY?'¥'+totals.totalCNY:'人民币待确认'}</span><span>{latest?.stale||latest?.needsUpdate?'需更新材料':latest?'待检查材料':'待准备材料'}</span><button className="button secondary small" onClick={()=>setEditor({recordIDs:batch.recordIDs,batchID:batch.id})}>准备合并材料</button>{pdf&&<FileLink material={pdf}>{latest?.stale?'历史 PDF':'报销说明 PDF'}</FileLink>}</div></td></tr>{open&&visible.filter(row=>batch.recordIDs.includes(row.record.id)).map(renderRow)}</Fragment>;
-    })}{desktopEntries.map(entry=>entry.batch?renderFinishedBatch(entry.batch,false):renderRow(rows.find(row=>row.record.id===entry.record.id)!))}</tbody></table>{!visible.length && <div className="ov-empty">{sorted.length ? '没有符合条件的费用，请调整筛选或搜索内容。' : '当前范围没有费用记录。'}</div>}</div><div className="ov-source-bar">{sources.map(source=>{const freshness=sourceFreshness(source,freshDays),current=source.status==='complete'&&freshness.fresh;return <span key={source.id} className={`ov-source-state ${current?'is-current':''}`}><span aria-hidden="true" />{vendorLabel(source.id)} 上次采集 <time dateTime={source.checkedAt}>{timeLabel(source.checkedAt)}</time>{!current&&<em>{freshness.checkedAt&&!freshness.fresh?'已过期':'需更新来源'}</em>}</span>;})}<label>更新周期<input type="number" min={1} max={365} aria-label="原始材料更新周期天数" value={freshDays} onChange={event => changePeriod(event.target.value)} />天</label><span className="ov-visible-count">显示 {visible.length} / {sorted.length} 笔</span></div></div>
+    <section className="ov-single-section" aria-label="单笔报销">
+      <div className="ov-single-heading"><h2>单笔报销</h2><span>每笔费用一行，点开查看完整流程</span></div>
+      <ScreenshotInboxButton data={data} onReload={onReload} onOpenRecord={onOpenRecord}/>
+      <div className="ov-toolbar">
+        <div className="ov-filters" role="group" aria-label="单笔费用筛选">{([['all','全部',sorted.length],['pending','待处理',sorted.length-completed],['completed','已报销',completed]] as const).map(([value,label,count])=><button key={value} className={filter===value?'is-active':''} aria-pressed={filter===value} onClick={()=>{setFilter(value);setProgress('all');}}>{label}<span>{count}</span></button>)}</div>
+        <div className="ov-search-tools"><label className="ov-progress-filter"><span className="sr-only">按进度筛选</span><select aria-label="按进度筛选" value={progress} onChange={event=>{setProgress(event.target.value as ProgressFilter);setFilter('all');}}>{progressFilters.map(([value,label])=><option key={value} value={value}>{label} ({sorted.filter(record=>matchesProgress(record,data,value)).length})</option>)}</select></label><label className="ov-search"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.8" stroke="currentColor" strokeWidth="1.3"/><path d="m13 13 4.2 4.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg><input aria-label="搜索服务、月份或账号" placeholder="搜索服务、月份或账号" value={search} onChange={event=>setSearch(event.target.value)}/></label></div>
+      </div>
+      <div className="ov-single-stage-filters" role="group" aria-label="按单笔当前阶段筛选">{columns.map((column,index)=><button key={column.id} type="button" className={filter===column.id?'is-active':''} aria-pressed={filter===column.id} onClick={()=>toggleStage(column.id)}><span>{column.title}</span><strong>{stageCounts[index]}</strong><small>待办 · {counts[index]}/{sorted.length} 已完成</small></button>)}</div>
+      {stageFilter&&<div className="ov-stage-summary"><span role="status">当前筛选：卡在“{stageFilter.title}” · {visible.length} 笔</span><button type="button" className="text-button" onClick={clearStage}>显示全部</button></div>}
+      <div className="ov-table-frame ov-single-frame"><table className="ov-single-table"><thead><tr><th scope="col">费用 · 当前进度</th></tr></thead><tbody>{visible.map(renderSingleRow)}</tbody></table>{!visible.length&&<div className="ov-empty">{sorted.length?'没有符合条件的单笔费用，请调整筛选或搜索内容。':'当前范围没有单笔费用记录。'}</div>}<div className="ov-source-bar">{sources.map(source=>{const freshness=sourceFreshness(source,freshDays),current=source.status==='complete'&&freshness.fresh;return <span key={source.id} className={`ov-source-state ${current?'is-current':''}`}><span aria-hidden="true"/>{vendorLabel(source.id)} 上次采集 <time dateTime={source.checkedAt}>{timeLabel(source.checkedAt)}</time>{!current&&<em>{freshness.checkedAt&&!freshness.fresh?'已过期':'需更新来源'}</em>}</span>;})}<label>更新周期<input type="number" min={1} max={365} aria-label="原始材料更新周期天数" value={freshDays} onChange={event=>changePeriod(event.target.value)}/>天</label><span className="ov-visible-count">显示 {visible.length} / {sorted.length} 笔</span></div></div>
+    </section>
   </section>;
 }
 

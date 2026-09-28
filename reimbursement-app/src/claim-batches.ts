@@ -52,17 +52,6 @@ export function preparingBatches(data:Workspace):ClaimBatch[]{
     return !documents[0].some(doc=>documents.every(list=>list.some(item=>item.id===doc.id)));
   });
 }
-/** Preserve list order and filtering while showing each finished batch only once. */
-type BatchListEntry={record:RecordItem;batch?:never}|{batch:ClaimBatch;record?:never};
-export function batchListEntries(records:RecordItem[],finished:ClaimBatch[]):BatchListEntry[]{
-  const emitted=new Set<string>();
-  return records.flatMap<BatchListEntry>(record=>{
-    const batch=finished.find(b=>b.recordIDs.includes(record.id));
-    if(!batch)return [{record}];
-    if(emitted.has(batch.id))return [];
-    emitted.add(batch.id);return [{batch}];
-  });
-}
 export function batchTitle(records:RecordItem[]) {
   const sorted=[...records].sort((a,b)=>a.date.localeCompare(b.date));
   const currency=sorted[0]?.currency||'';
