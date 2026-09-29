@@ -38,7 +38,7 @@ export function batchStage(batch:ClaimBatch,data:Workspace){
   const documents=(data.documents||[]).filter(document=>document.batchID===batch.id&&document.submissionFormat==='separate-invoices-v1'&&(!document.batchVersion||document.batchVersion===batch.version));
   const document=documents.find(candidate=>candidate.ready!==false&&candidate.recordIDs.length===batch.recordIDs.length&&members.length===batch.recordIDs.length&&members.every(record=>candidate.recordIDs.includes(record.id)&&applicationDocuments(record,data).some(ready=>ready.id===candidate.id)));
   if(document)return {stage:4 as BatchStage,label:'材料已确认，可下载 ZIP',detail:'ZIP 包含报销说明 PDF 和各笔发票原件；付款、申请理由及截图在 PDF 中。',document};
-  return {stage:3 as BatchStage,label:'准备合并材料',detail:'请完成共同申请理由、逐笔金额及说明 PDF 的检查确认。',document:undefined};
+  return {stage:3 as BatchStage,label:'准备合并材料',detail:members.some(record=>record.invoiceRecipient?.requiresSignedSupplement||record.invoiceRecipient?.recipientKind==='non_ihep')?'需上传领导签字的非单位抬头情况说明，并检查共同说明 PDF。':'请完成共同申请理由、逐笔金额及说明 PDF 的检查确认。',document:undefined};
 }
 /** Preparation visibility never changes batch membership or the shared document's history. */
 export function preparingBatches(data:Workspace):ClaimBatch[]{

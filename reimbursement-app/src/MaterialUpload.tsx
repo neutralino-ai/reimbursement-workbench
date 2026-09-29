@@ -21,7 +21,7 @@ export default function MaterialUpload({record,role,onReload,onBusy,onPending,on
   const [busy,setBusy]=useState(false),[preparingView,setPreparingView]=useState(false),[error,setError]=useState(''),[success,setSuccess]=useState('');
   const [pending,setPending]=useState<PendingFile[]>([]),[confirmID,setConfirmID]=useState('');
   const [activity,setActivity]=useState('');
-  const label=role==='payment'?'付款截图或 PDF':role==='purposeEvidence'?'用途截图或 PDF':role==='invoiceSupplement'?'有领导签字的发票抬头情况说明':'发票 PDF 或图片';
+  const label=role==='payment'?'付款截图或 PDF':role==='purposeEvidence'?'用途截图或 PDF':role==='invoiceSupplement'?'签字情况说明':'发票 PDF 或图片';
   const existing=record.materials.filter(material=>material.role===role);
   useEffect(()=>{onPending?.(pending.length>0||preparingView);},[pending.length,preparingView,onPending]);
   useEffect(()=>()=>onPending?.(false),[onPending]);
@@ -88,7 +88,7 @@ export default function MaterialUpload({record,role,onReload,onBusy,onPending,on
   const busyReason=preparingView?'正在压缩图片，请稍候。':busy?(activity||'正在处理附件')+'，请稍候。':'';
   const actionReason=busyReason||(disabled?disabledReason||'当前正在处理其他操作，请完成后再试。':'')||(!record.version?'尚未读取到费用版本，请刷新页面后再操作。':'');
   return <div className="material-upload">
-    <input className="sr-only" ref={input} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.heic" aria-label={'选择'+label} onChange={event=>void choose(event.target.files)} disabled={busy||preparingView||disabled}/>
+    <input className="sr-only" ref={input} type="file" multiple={role!=='invoiceSupplement'} accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.heic" aria-label={'选择'+label} onChange={event=>void choose(event.target.files)} disabled={busy||preparingView||disabled}/>
     <ActionButton type="button" className="button secondary" reason={actionReason} onClick={()=>input.current?.click()}>选择{label}</ActionButton>
     <p>图片会先在本机压缩；请预览并确认文字清楚后提交。上传压缩图时不保存原图，PDF 保持原文件。</p>
     {pending.length>0&&<div className="material-pending-list" aria-label="待上传附件">
