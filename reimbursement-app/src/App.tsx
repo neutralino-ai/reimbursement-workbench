@@ -14,7 +14,7 @@ type IconName = 'grid' | 'receipt' | 'folder' | 'history' | 'arrow' | 'search' |
 const money = (value: string | null | undefined, currency = 'CNY') => value == null || value === '' ? '待确认' : `${currency === 'CNY' ? '¥' : currency === 'USD' ? '$' : `${currency} `}${value}`;
 const asCents = (value: string) => /^-?\d+(?:\.\d{1,2})?$/.test(value) ? BigInt(value.replace('-', '').split('.')[0]) * 100n * (value.startsWith('-') ? -1n : 1n) + BigInt((value.replace('-', '').split('.')[1] || '').padEnd(2, '0')) * (value.startsWith('-') ? -1n : 1n) : 0n;
 const timeLabel = (value: string) => { const date = new Date(value); return Number.isNaN(date.valueOf()) ? value : date.toLocaleString('zh-CN', { hour12: false }); };
-const roleLabel = (role: string) => ({ invoice: '发票', payment: '付款凭证', receipt: '收据', approval: '审批材料', statement: '情况说明', arp: 'ARP 材料', exchangeRate: '汇率依据', policy: '制度原件', observation: '网页采集记录', document: '生成文档', other: '补充材料' })[role] || role || '原始材料';
+const roleLabel = (role: string) => ({ invoice: '发票', invoiceSupplement: '发票抬头签字说明', payment: '付款凭证', receipt: '收据', approval: '审批材料', statement: '情况说明', arp: 'ARP 材料', exchangeRate: '汇率依据', policy: '制度原件', observation: '网页采集记录', document: '生成文档', other: '补充材料' })[role] || role || '原始材料';
 
 function Icon({ name, size = 18, className = '' }: { name: IconName; size?: number; className?: string }) {
   const shapes: Record<IconName, ReactNode> = {

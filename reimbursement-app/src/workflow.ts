@@ -8,9 +8,9 @@ export type WorkflowContext = Pick<Workspace, 'documents' | 'deliveryItems' | 'm
 export type DeliveryFile = { material: Material; recordIDs: string[]; items: DeliveryItem[]; status: DeliveryStatus; manualStatus: DeliveryStatus; derivedByFinance: boolean; financeRecordIDs: string[]; kind: 'invoice' | 'payment' | 'statement' };
 
 export const workflowSteps: WorkflowStep[] = [
-  { id: 'materials', title: '收集原始材料', shortTitle: '原始材料', description: '发票原件与来源采集时间。', actionLabel: '查看原件', requirements: ['有效的发票原件', '来源采集时间在设定期限内'] },
+  { id: 'materials', title: '发票准备', shortTitle: '发票准备', description: '发票原件与抬头核对；非 IHEP 抬头提示第三阶段补签字说明。', actionLabel: '查看发票', requirements: ['有效的发票原件', '核对 Bill to 并提示第三阶段补件', '来源采集时间在设定期限内'] },
   { id: 'payment', title: '核验实付款', shortTitle: '实付款', description: '沿用已留存的付款凭证，仅补缺少的月份。', actionLabel: '查看付款', requirements: ['有效的实际付款凭证', '人工付款核验另行保留'] },
-  { id: 'claim', title: '准备申报材料', shortTitle: '申报材料', description: '发票、付款凭证和正式情况说明。', actionLabel: '准备材料', requirements: ['发票及付款原件', '助手填写情况说明', '有效且未过期的正式申请包'] },
+  { id: 'claim', title: '准备申报材料', shortTitle: '申报材料', description: '报销说明、用途说明；非 IHEP 抬头的申请包另附一份领导签字说明。', actionLabel: '准备材料', requirements: ['发票及付款原件', '助手填写用途与报销说明', '核对每份申请包的签字说明', '有效且未过期的正式申请包'] },
   { id: 'submission', title: '交财务秘书', shortTitle: '交秘书', description: '按文件记录已交、未交或待确认。', actionLabel: '登记交付', requirements: ['逐文件登记交付情况', '交秘书与 ARP 提交分别记录'] },
   { id: 'approval', title: '财务审核', shortTitle: '财务审核', description: '从 ARP 确认财务审核进度。', actionLabel: '查看审核', requirements: ['核对财务审核记录', '全部审核通过即完成报销'] },
 ];
@@ -32,7 +32,7 @@ export function isFinanceCompleted(record: RecordItem): boolean {
 }
 /** Pending finance review closes only the first four stages; the backend verifies its mapping and source evidence. */
 export function arePriorStepsComplete(record: RecordItem): boolean {
-  return isFinanceCompleted(record) || record.financeReviewPending === true;
+  return isFinanceCompleted(record) || record.financeReviewPending === true && (record.priorStepsComplete ?? record.invoiceRecipient?.valid !== false);
 }
 export function validMaterials(record: RecordItem, role: string): Material[] { return (record.materials || []).filter(material => material.role === role && material.integrity === 'ok'); }
 export function relatedDocuments(record: RecordItem, context?: WorkflowContext): GeneratedDocument[] { return (context?.documents || []).filter(document => document.recordIDs?.includes(record.id)); }
@@ -58,6 +58,7 @@ export function getExchangeRateEvidence(record: RecordItem, context?: WorkflowCo
 /** Review notes never stand in for a formal application; original evidence and generated output must remain intact. */
 export function applicationDocuments(record: RecordItem, context?: WorkflowContext): GeneratedDocument[] {
   const invoices = validMaterials(record, 'invoice'), payments = validMaterials(record, 'payment');
+  if (record.invoiceRecipient && !record.invoiceRecipient.valid) return [];
   if (!invoices.length || !payments.length || record.paymentVerified !== true || record.claimConfirmed !== true || (cents(record.claimedCNY) ?? 0n) <= 0n) return [];
   const exchange = getExchangeRateEvidence(record, context);
   if (!exchange.valid || cents(record.claimedCNY) !== cents(record.currency === 'CNY' ? record.amount : record.exchangeRate?.cnyAmount)) return [];
@@ -66,7 +67,8 @@ export function applicationDocuments(record: RecordItem, context?: WorkflowConte
     && document.materials.some(material => material.id === document.submissionPDFMaterialID && document.materialIDs?.includes(material.id) && ['document', 'statement'].includes(material.role) && /\.pdf$/i.test(material.filename))
     && document.materials.some(material => /\.docx$/i.test(material.filename))
     && invoices.some(material => document.sourceMaterialIDs?.includes(material.id)) && payments.some(material => document.sourceMaterialIDs?.includes(material.id))
-    && exchange.screenshots.every(material => document.sourceMaterialIDs?.includes(material.id)));
+    && exchange.screenshots.every(material => document.sourceMaterialIDs?.includes(material.id))
+    && (record.invoiceRecipient?.recipientKind !== 'non_ihep' || !!document.invoiceSupplementMaterialID && document.sourceMaterialIDs?.includes(document.invoiceSupplementMaterialID)));
 }
 
 export function sourceFreshness(source: Source | undefined, days = 7, now = Date.now()) {
@@ -84,10 +86,10 @@ export function deliveryFiles(records: RecordItem[], context?: WorkflowContext):
     const combined = applications.filter(document => document.batchID);
     const separate = applications.filter(document => document.submissionFormat === 'separate-invoices-v1');
     const candidates = separate.length ? [
-      ...(record.materials || []).filter(material => material.role === 'invoice' && separate.some(document => document.sourceMaterialIDs.includes(material.id))),
+      ...(record.materials || []).filter(material => material.role === 'invoice' && separate.some(document => document.sourceMaterialIDs.includes(material.id)) || material.role === 'invoiceSupplement' && separate.some(document => document.invoiceSupplementMaterialID === material.id)),
       ...separate.flatMap(document => document.materials.filter(material => material.id === document.submissionPDFMaterialID)),
     ] : [
-      ...(!combined.length ? (record.materials || []).filter(material => ['invoice', 'payment'].includes(material.role) || material.role === 'statement' && !/\.docx$/i.test(material.filename)) : []),
+      ...(!combined.length ? (record.materials || []).filter(material => ['invoice', 'invoiceSupplement', 'payment'].includes(material.role) || material.role === 'statement' && !/\.docx$/i.test(material.filename)) : []),
       ...(combined.length ? combined : applications).flatMap(document => document.materials.filter(material => material.id === document.submissionPDFMaterialID)),
     ];
     for (const material of candidates) {
@@ -96,7 +98,7 @@ export function deliveryFiles(records: RecordItem[], context?: WorkflowContext):
       const item: DeliveryItem = stored || { recordID: record.id, materialID: material.id, status: 'unknown', updatedAt: null, version: 'new' };
       const existing = files.get(material.id);
       if (existing) { if (!existing.recordIDs.includes(record.id)) { existing.recordIDs.push(record.id); existing.items.push(item); } }
-      else files.set(material.id, { material, recordIDs: [record.id], items: [item], status: item.status, manualStatus: item.status, derivedByFinance: false, financeRecordIDs: [], kind: material.role === 'invoice' ? 'invoice' : material.role === 'payment' ? 'payment' : 'statement' });
+      else files.set(material.id, { material, recordIDs: [record.id], items: [item], status: item.status, manualStatus: item.status, derivedByFinance: false, financeRecordIDs: [], kind: ['invoice', 'invoiceSupplement'].includes(material.role) ? 'invoice' : material.role === 'payment' ? 'payment' : 'statement' });
     }
   }
   const financeIDs = new Set(records.filter(arePriorStepsComplete).map(record => record.id));
@@ -124,7 +126,8 @@ export function approvalSummary(records: RecordItem[]) {
 /** Presentation stages report existing evidence; they never change payment, approval or human verification facts. */
 export function getRecordWorkflow(record: RecordItem, context?: WorkflowContext): RecordWorkflowStep[] {
   if (isFinanceCompleted(record)) return workflowSteps.map(step => ({ id: step.id, state: 'done', detail: '财务已通过，已报销；按报销规则自动完成此步骤。原文件与实际登记记录保持原样。' }));
-  if (record.financeReviewPending === true) return workflowSteps.map(step => ({ id: step.id, state: step.id === 'approval' ? 'todo' : 'done', detail: step.id === 'approval' ? `财务审核中，等待全部审核通过。ARP 单号 ${record.submissionReference}。` : '已进入财务审核，前序步骤自动完成；原件与实际登记记录保持原样。' }));
+  const recipientProblem = !!record.invoiceRecipient && !record.invoiceRecipient.valid;
+  if (record.financeReviewPending === true) return workflowSteps.map(step => ({ id: step.id, state: step.id === 'materials' && recipientProblem || step.id === 'claim' && !arePriorStepsComplete(record) ? 'attention' : step.id === 'approval' ? 'todo' : 'done', detail: step.id === 'materials' && recipientProblem ? '发票抬头核对依据需复查。' : step.id === 'claim' && !arePriorStepsComplete(record) ? '本份材料还需核对领导签字的发票抬头说明。' : step.id === 'approval' ? `财务审核中，等待全部审核通过。ARP 单号 ${record.submissionReference}。` : '已进入财务审核，前序步骤自动完成；原件与实际登记记录保持原样。' }));
   const invoices = validMaterials(record, 'invoice'), payments = validMaterials(record, 'payment');
   const invoiceProblem = (record.materials || []).some(material => material.role === 'invoice' && material.integrity !== 'ok');
   const paymentProblem = (record.materials || []).some(material => material.role === 'payment' && material.integrity !== 'ok');
@@ -135,9 +138,9 @@ export function getRecordWorkflow(record: RecordItem, context?: WorkflowContext)
   const delivered = files.filter(file => file.status === 'submitted' && file.material.integrity === 'ok').length;
   const claim = cents(record.claimedCNY), confirmed = record.claimConfirmed === true && claim !== null && claim > 0n;
   return [
-    { id: 'materials', state: invoices.length ? 'done' : invoiceProblem ? 'attention' : 'todo', detail: invoices.length ? `已留存 ${invoices.length} 份有效发票原件。` : invoiceProblem ? '发票原件缺失或已改变。' : '待收集发票原件。' },
+    { id: 'materials', state: recipientProblem ? 'attention' : invoices.length ? 'done' : invoiceProblem ? 'attention' : 'todo', detail: recipientProblem ? '发票抬头核对依据需要复查。' : invoices.length ? `已留存 ${invoices.length} 份有效发票原件。${record.invoiceRecipient?.requiresSignedSupplement ? '第三阶段每份申报材料须附一份领导签字说明。' : ''}` : invoiceProblem ? '发票原件缺失或已改变。' : '待收集发票原件。' },
     { id: 'payment', state: payments.length ? 'done' : paymentProblem ? 'attention' : 'todo', detail: payments.length ? `付款原件已留存，无需重复提供。${record.paymentVerified === true ? '付款事实已核实。' : '付款事实待核对。'}` : paymentProblem ? '付款原件缺失或已改变，请补齐。' : '尚缺实际付款凭证。' },
-    { id: 'claim', state: applications.length ? 'done' : staleApplication ? 'attention' : 'todo', detail: applications.length ? '报销说明已备妥，原件与发票日期汇率证据完整。' : !exchange.valid ? `待补发票日期 ${record.date} 的中行折算价截图及报销说明 PDF。` : staleApplication ? '申请包需要更新，不能使用过期或未就绪的版本。' : '待准备报销说明 PDF（含付款与汇率截图），发票原件单独随 ZIP 提交；核对说明不计作申报材料。' },
+    { id: 'claim', state: applications.length ? 'done' : staleApplication || record.invoiceRecipient?.requiresSignedSupplement ? 'attention' : 'todo', detail: applications.length ? '报销说明已备妥，原件与发票日期汇率证据完整。' : record.invoiceRecipient?.requiresSignedSupplement ? '准备用途与报销说明时，须为本份申报材料附一份领导签字的发票抬头说明；交财务前确认签字件已上传。' : !exchange.valid ? `待补发票日期 ${record.date} 的中行折算价截图及报销说明 PDF。` : staleApplication ? '申请包需要更新，不能使用过期或未就绪的版本。' : '待准备报销说明 PDF（含付款与汇率截图），发票原件单独随 ZIP 提交；核对说明不计作申报材料。' },
     { id: 'submission', state: applications.length && files.length && delivered === files.length ? 'done' : 'todo', detail: `${delivered}/${files.length} 份现有交付文件已交财务秘书${applications.length ? '。' : '；正式申请包待准备。'}${record.submissionReference ? `ARP 单号另记为 ${record.submissionReference}。` : ''}` },
     { id: 'approval', state: confirmed && record.status === 'completed' ? 'done' : 'todo', detail: !confirmed ? `申报金额待确认；已关联获批 ${cny(record.approvedCNY)}，最终差额未知。` : `已关联获批 ${cny(record.approvedCNY)}；待批 / 未关联 ${cny(record.outstandingCNY)}。` },
   ];

@@ -9,7 +9,7 @@ type PendingFile = {id:string; file:File; note:string; originalBytes:number};
 
 export default function MaterialUpload({record,role,onReload,onBusy,onPending,onActivity,disabled=false,disabledReason}: {
   record:RecordItem;
-  role:'invoice'|'payment'|'purposeEvidence';
+  role:'invoice'|'invoiceSupplement'|'payment'|'purposeEvidence';
   onReload:()=>Promise<Workspace>;
   onBusy:(value:boolean)=>void;
   onPending?:(value:boolean)=>void;
@@ -21,7 +21,7 @@ export default function MaterialUpload({record,role,onReload,onBusy,onPending,on
   const [busy,setBusy]=useState(false),[preparingView,setPreparingView]=useState(false),[error,setError]=useState(''),[success,setSuccess]=useState('');
   const [pending,setPending]=useState<PendingFile[]>([]),[confirmID,setConfirmID]=useState('');
   const [activity,setActivity]=useState('');
-  const label=role==='payment'?'付款截图或 PDF':role==='purposeEvidence'?'用途截图或 PDF':'发票 PDF 或图片';
+  const label=role==='payment'?'付款截图或 PDF':role==='purposeEvidence'?'用途截图或 PDF':role==='invoiceSupplement'?'有领导签字的发票抬头情况说明':'发票 PDF 或图片';
   const existing=record.materials.filter(material=>material.role===role);
   useEffect(()=>{onPending?.(pending.length>0||preparingView);},[pending.length,preparingView,onPending]);
   useEffect(()=>()=>onPending?.(false),[onPending]);

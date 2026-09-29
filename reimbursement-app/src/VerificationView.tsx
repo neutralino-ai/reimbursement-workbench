@@ -10,7 +10,7 @@ type GeneratedDocument = { id: string; title: string; status: 'draft' | 'ready';
 type Task = { month?: string; id: string; recordID?: string; kind: string; status: string; detail: string };
 type Props = { data: Workspace; onReload: () => Promise<Workspace>; onSelect: (id: string) => void };
 const reviewLabel = { unreviewed: '尚未核验', verified: '已核验', stale: '核验后有更新', rejected: '需要纠正' };
-const roleLabel: Record<string, string> = { invoice: '发票', payment: '付款凭证', receipt: '收据', approval: '审批证据', observation: '采集记录', document: '生成文档', other: '补充材料' };
+const roleLabel: Record<string, string> = { invoice: '发票', invoiceSupplement: '发票抬头签字说明', payment: '付款凭证', receipt: '收据', approval: '审批证据', observation: '采集记录', document: '生成文档', other: '补充材料' };
 const money = (value: string | null | undefined, currency = 'CNY') => value ? `${currency === 'USD' ? '$' : currency === 'CNY' ? '¥' : `${currency} `}${value}` : '待确认';
 const dateTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '暂无时间记录';
 

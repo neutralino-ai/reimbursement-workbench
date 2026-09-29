@@ -62,6 +62,25 @@ test('financial review completes the first four stages while full approval close
   assert.ok(getRecordWorkflow({ ...input, status: 'completed' }).every(step => step.state === 'done'));
 });
 
+test('personal invoice recipient is flagged at upload and requires one signed attachment per application package', () => {
+  const recipient = { invoiceMaterialID: 'invoice', recipientKind: 'non_ihep', recipientText: 'Personal address', note: 'Checked original', valid: true, requiresSignedSupplement: true };
+  const pending = readyRecord({ invoiceRecipient: recipient });
+  const ctx = context({ documents: [application({ submissionFormat: 'separate-invoices-v1' })] });
+  assert.equal(byId(pending, ctx).materials.state, 'done');
+  assert.match(byId(pending, ctx).materials.detail, /第三阶段/);
+  assert.equal(byId(pending, ctx).claim.state, 'attention');
+  assert.deepEqual(applicationDocuments(pending, ctx), []);
+  const supplement = original('invoiceSupplement', 'ok', 'signed', 'leader-signed.pdf');
+  const complete = readyRecord({ materials: [...pending.materials, supplement], invoiceRecipient: recipient });
+  const packaged = context({ documents: [application({ submissionFormat: 'separate-invoices-v1', sourceMaterialIDs: ['invoice', 'payment', 'fx', supplement.id], invoiceSupplementMaterialID: supplement.id })] });
+  assert.equal(byId(complete, packaged).materials.state, 'done');
+  assert.deepEqual(deliveryFiles([complete], packaged).map(file => file.material.id), ['invoice', 'signed', 'application-pdf']);
+  const inFinance = { ...pending, financeReviewPending: true, submissionReference: 'ARP-SYNTHETIC' };
+  assert.equal(arePriorStepsComplete(inFinance), true);
+  assert.equal(getNextStep(inFinance), 'approval');
+  assert.equal(byId({ ...inFinance, status: 'completed' }).materials.state, 'done');
+});
+
 test('financial review derives delivery but keeps manual file states and unrelated records separate', () => {
   const input = record({ financeReviewPending: true });
   const ctx = context({ deliveryItems: [{ recordID: input.id, materialID: 'invoice', status: 'not_submitted', version: 'manual-v1', updatedAt: null }] });
@@ -207,7 +226,7 @@ test('ARP amounts preserve exact cents, known partial totals and unknown differe
 
 test('five steps keep stable drawer IDs with the new task semantics', () => {
   assert.deepEqual(workflowSteps.map(step => step.id), ['materials', 'payment', 'claim', 'submission', 'approval']);
-  assert.deepEqual(workflowSteps.map(step => step.title), ['收集原始材料', '核验实付款', '准备申报材料', '交财务秘书', '财务审核']);
+  assert.deepEqual(workflowSteps.map(step => step.title), ['发票准备', '核验实付款', '准备申报材料', '交财务秘书', '财务审核']);
   assert.ok(workflowSteps.every(step => step.actionLabel && step.requirements.length));
 });
 

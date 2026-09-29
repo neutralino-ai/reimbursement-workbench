@@ -8,13 +8,13 @@ export function mobileNextAction(record: RecordItem, context: WorkflowContext) {
   // A collected payment file can still need verification before a packet is prepared.
   if (!completed && !record.financeReviewPending && step === 'claim' && !record.paymentVerified) step = 'payment';
   const titles: Record<WorkflowStepId, string> = {
-    materials: '收集发票',
+    materials: '收集并核对发票',
     payment: validMaterials(record, 'payment').length ? '核验付款' : '补付款凭证',
     claim: '准备申报材料',
     submission: '确认交财务',
     approval: completed ? '已报销' : record.financeReviewPending ? '财务审核中' : '核对财务审核',
   };
-  return {step, title: titles[step], completed, waiting: !completed && record.financeReviewPending === true};
+  return {step, title: titles[step], completed, waiting: !completed && record.financeReviewPending === true && step === 'approval'};
 }
 
 export const progressFilters = [
@@ -38,7 +38,7 @@ export function matchesProgress(record: RecordItem, context: WorkflowContext, fi
   if (action.completed) return false;
   if (filter === 'finance-pending') return action.waiting;
   if (action.waiting) return false;
-  if (filter === 'missing-invoice') return !validMaterials(record, 'invoice').length;
+  if (filter === 'missing-invoice') return !validMaterials(record, 'invoice').length || record.invoiceRecipient?.valid === false;
   if (filter === 'missing-payment') return !validMaterials(record, 'payment').length;
   if (filter === 'verify-payment') return !!validMaterials(record, 'payment').length && !record.paymentVerified;
   return action.step === filter;

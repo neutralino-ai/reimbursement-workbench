@@ -2,7 +2,7 @@ import {useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode} fr
 import type {RecordItem, Workspace} from './types';
 import {api} from './api';
 import {AuthenticatedFileLink, AuthenticatedImage} from './AuthenticatedFiles';
-import {applicationDocuments, arePriorStepsComplete, cny, getExchangeRateEvidence, getNextStep, getRecordWorkflow, workflowSteps, type WorkflowStepId} from './workflow';
+import {applicationDocuments, arePriorStepsComplete, cny, getExchangeRateEvidence, getNextStep, getRecordWorkflow, isFinanceCompleted, workflowSteps, type WorkflowStepId} from './workflow';
 import {DeliveryPanel} from './WorkflowView';
 import MaterialUpload from './MaterialUpload';
 import {AIRecordPanel} from './Automation';
@@ -27,7 +27,9 @@ export default function RecordWorkflowDrawer({data, record, initialStep, onClose
   const [dirtyFlags,setDirtyFlags]=useState<Record<string,boolean>>({});
   const dirty=Object.values(dirtyFlags).some(Boolean);
   const dirtyControls=useMemo(()=>Object.fromEntries(['ai','form','approval'].map(key=>[key,(value:boolean)=>setDirtyFlags(previous=>previous[key]===value?previous:{...previous,[key]:value})])) as Record<string,(value:boolean)=>void>,[]);
-  const [uploadPending, setUploadPending] = useState(false);
+  const [pendingUploads, setPendingUploads] = useState<Record<string,boolean>>({});
+  const uploadPending=Object.values(pendingUploads).some(Boolean);
+  const pendingControls=useMemo(()=>Object.fromEntries(['invoice','payment'].map(key=>[key,(value:boolean)=>setPendingUploads(previous=>previous[key]===value?previous:{...previous,[key]:value})])) as Record<string,(value:boolean)=>void>,[]);
   const [busy, setBusy] = useState(false);
   const drawerRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -90,7 +92,7 @@ export default function RecordWorkflowDrawer({data, record, initialStep, onClose
   }
   function discard() {
     setDirtyFlags({});
-    setUploadPending(false);
+    setPendingUploads({});
     if (discardToClose) { onClose(); return; }
     if (switchTo) setStep(switchTo);
     setSwitchTo(null);
@@ -107,8 +109,8 @@ export default function RecordWorkflowDrawer({data, record, initialStep, onClose
         </nav>
         {(switchTo || discardToClose) && <div ref={unsavedRef} tabIndex={-1} className="workflow-unsaved" role="alert"><strong>这一步有尚未保存的修改</strong><p>可以继续编辑并保存，或放弃本次修改。</p><div><button className="button secondary" onClick={() => {setSwitchTo(null);setDiscardToClose(false);}}>继续编辑</button><button className="button danger" onClick={discard}>{discardToClose ? '放弃修改并关闭' : '放弃修改并切换'}</button></div></div>}
         <section className="workflow-step-intro" aria-labelledby="step-title"><div><span className={`workflow-step-state ${current.state}`}>{current.state === 'done' ? '已完成' : current.state === 'attention' ? '需要处理' : step === 'approval' && record.financeReviewPending ? '审核中' : '待维护'}</span><h3 id="step-title">{definition.title}</h3></div>{(step !== 'claim' || arePriorStepsComplete(record)) && <p className="workflow-step-detail">{current.detail}</p>}</section>
-        {step === 'materials' && <section className="drawer-section"><div className="section-heading"><h3>原始文件</h3><span className="small-muted">{record.materials.length} 份</span></div>{materials}<MaterialUpload record={record} role="invoice" onReload={onReload} onBusy={setBusy} onPending={setUploadPending} /><button className="text-button" onClick={onOpenMaterials}>全部材料与来源 →</button></section>}
-        {step === 'payment' && <><AIRecordPanel key={"review:"+record.id} record={record} mode="review" onReload={onReload} onDirty={dirtyControls.ai} onBusy={setBusy}/><div className="drawer-section"><MaterialUpload record={record} role="payment" onReload={onReload} onBusy={setBusy} onPending={setUploadPending} disabled={dirty} /></div><details className="workflow-evidence" open><summary>发票与付款原件</summary>{materials}</details><ReviewStepForm key={`${step}:${record.version}`} step={step} record={record} onReload={onReload} onDirty={dirtyControls.form} onBusy={setBusy} /></>}
+        {step === 'materials' && <section className="drawer-section"><div className="section-heading"><h3>发票与抬头</h3><span className="small-muted">{record.materials.length} 份</span></div>{materials}<MaterialUpload record={record} role="invoice" onReload={onReload} onBusy={setBusy} onPending={pendingControls.invoice} /><p className="form-hint">上传后核对发票 Bill to；若为个人地址而非 IHEP，第三阶段准备申报材料时须为每份材料补一份有领导签字的抬头情况说明。</p>{record.invoiceRecipient?.requiresSignedSupplement && !isFinanceCompleted(record) && <p className="form-hint">本张发票已标记非 IHEP 抬头。合并申报时与包内相关发票共用一份签字说明。</p>}<button className="text-button" onClick={onOpenMaterials}>全部材料与来源 →</button></section>}
+        {step === 'payment' && <><AIRecordPanel key={"review:"+record.id} record={record} mode="review" onReload={onReload} onDirty={dirtyControls.ai} onBusy={setBusy}/><div className="drawer-section"><MaterialUpload record={record} role="payment" onReload={onReload} onBusy={setBusy} onPending={pendingControls.payment} disabled={dirty} /></div><details className="workflow-evidence" open><summary>发票与付款原件</summary>{materials}</details><ReviewStepForm key={`${step}:${record.version}`} step={step} record={record} onReload={onReload} onDirty={dirtyControls.form} onBusy={setBusy} /></>}
         {step === 'claim' && <>{!(data.claimBatches||[]).some(b=>b.status!=='archived'&&b.recordIDs.includes(record.id))&&<AIRecordPanel key={"purpose:"+record.id} record={record} mode="purpose" onReload={onReload} onDirty={dirtyControls.ai} onBusy={setBusy}/>}<ApplicationFiles data={data} record={record} /><details className="workflow-evidence"><summary>申报金额与换算依据</summary><ReviewStepForm key={step} step={step} record={record} onReload={onReload} onDirty={dirtyControls.form} onBusy={setBusy} />{materials}</details></>}
         {step === 'submission' && <DeliveryPanel data={data} onReload={onReload} recordID={record.id} />}
         {step === 'approval' && <>{record.financeReviewPending && <section className="drawer-section"><dl className="fx-summary"><div><dt>报销单号</dt><dd>{record.submissionReference}</dd></div><div><dt>本笔待审金额</dt><dd>{cny(record.claimedCNY)}</dd></div><div><dt>ARP 状态</dt><dd>{reviewSource?.status || '财务审核中'}</dd></div><div><dt>上次查询</dt><dd>{reviewSource?.observedAt ? new Date(reviewSource.observedAt).toLocaleString('zh-CN', {hour12:false}) : '未记录'}</dd></div></dl>{(record.financeReviewEvidenceIDs || []).map(id => <AuthenticatedFileLink key={id} className="material-item" href={`/api/materials/${encodeURIComponent(id)}`}>查看财务审核记录</AuthenticatedFileLink>)}</section>}{record.financeReviewPending ? <details className="workflow-evidence"><summary>审核通过后关联金额</summary>{approval({onDirty:dirtyControls.approval,onBusy:setBusy,busy})}</details> : <section className="drawer-section">{approval({onDirty:dirtyControls.approval,onBusy:setBusy,busy})}</section>}<details className="workflow-evidence"><summary>ARP 单号与提交日期</summary><ReviewStepForm key="arp-registration" step="submission" record={record} onReload={onReload} onDirty={dirtyControls.form} onBusy={setBusy} /></details></>}
