@@ -19,6 +19,7 @@ const sameIDs=(a:string[],b:string[])=>JSON.stringify([...a].sort())===JSON.stri
 export default function BatchEditor({data,recordIDs,batch,onReload,onClose,delivery,initialSection}:{data:Workspace;recordIDs:string[];batch?:ClaimBatch;onReload:()=>Promise<unknown>;onClose:()=>void;delivery?:ReactNode;initialSection?:'supplement'}){
   const dialog=useRef<HTMLDialogElement>(null);
   const supplementPanel=useRef<HTMLElement>(null);
+  const discardPanel=useRef<HTMLDivElement>(null);
   const commands=useRef(new Map<string,string>());
   async function post<T>(action:string,payload:object):Promise<T>{
     const key=JSON.stringify([action,payload]);
@@ -31,6 +32,7 @@ export default function BatchEditor({data,recordIDs,batch,onReload,onClose,deliv
   const [localState]=useState(()=>{try{return {draft:readBatchDraft(localStorage,cacheKey),error:''};}catch{return {draft:null,error:'无法读取本机暂存。当前内容仍可编辑，请检查浏览器存储设置。'};}});
   const [localDraft,setLocalDraft]=useState(localState.draft);
   const [localNotice,setLocalNotice]=useState(localState.error);
+  const [localSaveError,setLocalSaveError]=useState('');
   const [id]=useState(batch?.id||localState.draft?.id||crypto.randomUUID());
   const [saved,setSaved]=useState<ClaimBatch|undefined>(batch);
   const records=recordIDs.map(id=>data.records.find(r=>r.id===id)!).filter(Boolean);
@@ -77,11 +79,17 @@ export default function BatchEditor({data,recordIDs,batch,onReload,onClose,deliv
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
   useEffect(()=>{setStartedAt(uploadBusy?Date.now():null);},[uploadBusy]);
   useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(dirtyRef.current){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
+  useEffect(()=>{if(discard){dialog.current?.scrollTo({top:0});discardPanel.current?.focus({preventScroll:true});}},[discard]);
   function close(){if(busyRef.current)return;if(dirtyRef.current)setDiscard(true);else onClose();}
   function stash(){
     const value:BatchLocalDraft={schema:1,id,recordIDs,baseVersion:saved?.version||'new',savedAt:new Date().toISOString(),purpose,sourceIDs,draft:editedDraft|| (purposeJob?.result?.purpose?{jobID:purposeJob.id,text:purposeJob.result.purpose}:null)};
-    try{writeBatchDraft(localStorage,cacheKey,value);window.dispatchEvent(new Event('reimbursement-batch-draft'));setLocalDraft(value);setLocalSnapshot(snapshot);setLocalNotice('已暂存到本机 '+new Date(value.savedAt).toLocaleTimeString()+'。'+(pending?'待上传文件未缓存，关闭后需重新选择。':''));return true;}
-    catch{setLocalNotice('暂存失败：本机存储不可用或空间不足。请保留窗口并复制文字备份。');return false;}
+    try{writeBatchDraft(localStorage,cacheKey,value);setLocalSaveError('');window.dispatchEvent(new Event('reimbursement-batch-draft'));setLocalDraft(value);setLocalSnapshot(snapshot);setLocalNotice('已暂存到本机 '+new Date(value.savedAt).toLocaleTimeString()+'。'+((pending||supplementPending)?'待上传文件未缓存，关闭后需重新选择。':''));return true;}
+    catch{setLocalSaveError('暂存失败：本机存储不可用或空间不足。内容已保留在窗口中，请重试或复制文字备份。');return false;}
+  }
+  function stashAndClose(discardPending=false){
+    if(busyRef.current)return;
+    if((pending||supplementPending)&&!discardPending){setDiscard(true);return;}
+    if(stash())onClose();
   }
   function restore(){
     if(!localDraft)return;
@@ -113,14 +121,14 @@ export default function BatchEditor({data,recordIDs,batch,onReload,onClose,deliv
   const adoptReason=mutationReason||batchAdoptionReason(purposeJob,saved?.version,draftText,adoptionWouldOverwrite);
   const approveReason=processingReason||(dirty?'共同说明或截图有修改，请保存并重新生成 PDF 后再检查。':'')||pendingReason||(stale?'PDF 的来源已变化，请重新生成并检查。':'')||(job?.status!=='completed'?'PDF 尚未生成完成，请等待任务完成后再检查。':'')||supplementReason;
   return createPortal(<dialog ref={dialog} className="batch-dialog" aria-label="合并准备报销材料" onCancel={e=>{e.preventDefault();e.stopPropagation();close();}} onKeyDown={e=>e.stopPropagation()}>
-    <header><div><h2>合并准备报销材料</h2><p>{batchTitle(records)}</p>{(busy||generating||uploadBusy||loadError)&&<p className="batch-header-status">{loadError?'状态连接异常，请查看提示':progress}{(busy||generating||uploadBusy)?` · ${elapsed} 秒`:''}</p>}</div><div className="batch-header-actions"><ActionButton className="button secondary" onClick={()=>stash()}>暂存到本机</ActionButton><ActionButton className="batch-close" aria-label="关闭合并材料" onClick={close} reason={processingReason}>×</ActionButton></div></header>
+    <header><div><h2>合并准备报销材料</h2><p>{batchTitle(records)}</p>{localSaveError&&<div className="feedback error" role="alert">{localSaveError}</div>}{(busy||generating||uploadBusy||loadError)&&<p className="batch-header-status">{loadError?'状态连接异常，请查看提示':progress}{(busy||generating||uploadBusy)?` · ${elapsed} 秒`:''}</p>}</div><div className="batch-header-actions"><ActionButton className="button secondary" onClick={()=>stashAndClose()} reason={processingReason}>暂存并关闭</ActionButton><ActionButton className="batch-close" aria-label="关闭合并材料" onClick={close} reason={processingReason}>×</ActionButton></div></header>
     <div className="batch-content">
+      {discard&&<div ref={discardPanel} tabIndex={-1} role="alert" className="workflow-unsaved"><strong>说明、草稿或待上传文件尚未保存</strong><p>已保存的费用、附件和 PDF 不会被删除。{(pending||supplementPending)?'待上传的科研截图或签字说明不能暂存，关闭后需重新选择。':''}</p><ActionButton className="button secondary" onClick={()=>setDiscard(false)}>继续编辑</ActionButton><ActionButton className="button secondary" onClick={()=>stashAndClose(true)} reason={processingReason}>{pending||supplementPending?'暂存文字并关闭':'暂存并关闭'}</ActionButton><ActionButton className="button danger" onClick={onClose}>放弃未保存内容并关闭</ActionButton></div>}
       {needsSupplement&&<InvoiceSupplement panelRef={supplementPanel} records={records} batchID={id} baseVersion={saved?.version} state={state} value={supplementID} onSelection={setSupplementID} onReload={onReload} onRefresh={refresh} onBusy={setSupplementBusy} onPending={setSupplementPending} disabled={busy||uploadBusy||!!generating} locked={locked}/>}
 
       <section className="batch-progress" aria-label="当前处理状态"><strong role="status">{loadError?'暂时无法确认服务器进度':progress}</strong>{(busy||generating||uploadBusy)&&<span>已等待 {elapsed} 秒</span>}<p>{updatedAt?'上次成功更新：'+new Date(updatedAt).toLocaleTimeString():'尚未取得服务器状态'}{refreshing?' · 正在刷新…':''}</p>{(busy||generating||uploadBusy)&&elapsed>=30&&<p>耗时较长。可先暂存文字；服务器任务提交后可关闭窗口，稍后查看结果。</p>}{generating&&elapsed>=180&&<p>任务持续时间较长，仅凭等待时间无法判断是否卡住。请刷新状态检查，不要重复提交。</p>}<ActionButton className="text-button" reason={refreshing?'正在读取服务器状态，请稍候。':''} onClick={()=>{void refresh();void reload();}}>{refreshing?'正在刷新状态…':'刷新状态'}</ActionButton>{loadError&&<p className="feedback error" role="alert">{loadError}</p>}{error&&<p className="feedback error" role="alert">{error}</p>}{message&&<p role="status">{message}</p>}</section>
       <section className="batch-local" aria-label="本机暂存"><p>暂存共同说明、修改后的 DeepSeek 草稿及截图勾选，仅保存在当前设备的浏览器或应用中。待上传文件需重新选择；清理应用数据会删除暂存。</p>{localDraft&&<div><span>本机暂存于 {new Date(localDraft.savedAt).toLocaleString()} </span><ActionButton className="text-button" reason={lockedReason||processingReason||(localDraft.id!==id?'这份暂存属于其他合并包，不能恢复到当前包。':'' )} onClick={restore}>恢复暂存</ActionButton></div>}{localNotice&&<p role="status">{localNotice}</p>}</section>
       {editedDraft&&editedDraft.jobID!==purposeJob?.id&&<section className="ai-job"><label htmlFor="batch-recovered-draft">暂存的 DeepSeek 草稿（请核对当前费用与截图）</label><textarea id="batch-recovered-draft" rows={6} maxLength={6000} disabled={busy||uploadBusy||locked} value={editedDraft.text} onChange={e=>setEditedDraft({...editedDraft,text:e.target.value})}/><p className="form-hint">对应任务尚未加载或已有新任务。可继续编辑或复制文字到共同说明，核对后再保存。</p></section>}
-      {discard&&<div role="alert" className="workflow-unsaved"><strong>说明、草稿或待上传文件尚未保存</strong><p>已保存的费用、附件和 PDF 不会被删除。{pending?'待上传文件不能暂存，关闭后需重新选择。':''}</p><ActionButton className="button secondary" onClick={()=>setDiscard(false)}>继续编辑</ActionButton><ActionButton className="button secondary" onClick={()=>{if(stash())onClose();}}>暂存并关闭</ActionButton><ActionButton className="button danger" onClick={onClose}>放弃未保存内容并关闭</ActionButton></div>}
       <p>保留每笔费用明细，共用一份报销说明 PDF，发票原件单独随 ZIP 提交。按各自发票日期换算，合计限额 ¥4,000.00。</p>
       <div className="batch-amounts">{records.map((r,i)=><div key={r.id}><strong>{r.billingMonth} · {r.invoiceNumber}</strong><span>发票日 {r.date} · {r.currency} {r.amount}</span><span>{r.currency==='CNY'?'无需换汇':r.exchangeRate?.valid?`当日中行折算价 ${r.exchangeRate.quotedRate} / 100`:'待补发票日汇率'}</span><b>{amounts.amounts[i]?`¥${amounts.amounts[i]}`:'人民币待确认'}</b>{!r.paymentVerified&&<small>付款待核验</small>}</div>)}</div>
       <p className={amounts.overLimit?'feedback error':'batch-total'}>合计：{amounts.totalCNY?`¥${amounts.totalCNY}`:'缺少汇率，暂不能合计'} / ¥4,000.00{amounts.overLimit?'，已超限，请减少费用笔数。':''}</p>
