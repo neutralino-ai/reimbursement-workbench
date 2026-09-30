@@ -2,14 +2,16 @@ import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
 import {api,cachedResource,peekCachedResource} from './api';
 import {AuthenticatedFileLink} from './AuthenticatedFiles';
 import MaterialUpload from './MaterialUpload';
+import InvoiceSupplement from './InvoiceSupplement';
+import {currentSupplementReview,supplementReadyReason} from './invoice-supplement';
 import type {RecordItem,Workspace} from './types';
 import './automation.css';
 import SpeechInput from './SpeechInput';
 import {appendDictation} from './speech-state';
 
-export type Job={id:string;kind:string;recordID?:string;batchID?:string;recordIDs?:string[];sourceBatchVersion?:string;status:string;createdAt:string;finishedAt?:string;error?:string;current?:boolean;result?:{submissionFormat?:string;purpose?:string;missing?:string[];reasons?:string[];documentID?:string;documentVersions?:Record<string,string>;pdfMaterialID?:string;docxMaterialID?:string;materialID?:string;approved?:boolean;pages?:number;invoiceCheck?:{checks:{field:string;result:string}[]};paymentCheck?:{checks:{field:string;result:string}[]}}};
+export type Job={id:string;kind:string;materialID?:string;recordID?:string;batchID?:string;recordIDs?:string[];sourceBatchVersion?:string;status:string;createdAt:string;finishedAt?:string;error?:string;current?:boolean;result?:{submissionFormat?:string;purpose?:string;missing?:string[];reasons?:string[];documentID?:string;documentVersions?:Record<string,string>;pdfMaterialID?:string;docxMaterialID?:string;materialID?:string;approved?:boolean;pages?:number;invoiceCheck?:{checks:{field:string;result:string}[]};paymentCheck?:{checks:{field:string;result:string}[]}}};
 type Purpose={version:string;text:string;sourceMaterialIDs:string[];draft:string;missing:string[];confirmedText?:string};
-type AutomationState={settings:{configured:boolean;enabled:boolean;keyHint:string;model:string;revision:string;lastTest?:{ok:boolean;at:string}|null};jobs:Job[];purposes:Record<string,Purpose>};
+export type AutomationState={settings:{configured:boolean;enabled:boolean;keyHint:string;model:string;revision:string;lastTest?:{ok:boolean;at:string}|null};jobs:Job[];purposes:Record<string,Purpose>};
 const labels:Record<string,string>={queued:'排队中',running:'处理中',matched:'核验通过',mismatch:'字段不符',needs_review:'需人工核对',failed:'处理失败',interrupted:'任务已中断',stale:'内容已变化',completed:'已生成'};
 const fieldLabels:Record<string,string>={merchant:'商户',invoiceNumber:'发票编号',date:'日期',amount:'原币金额',currency:'币种',status:'结算状态',duplicate:'重复凭证'};
 const post=<T,>(action:string,data:object)=>api<T>('/api/automation/'+action,{method:'POST',body:JSON.stringify({...data,operationId:crypto.randomUUID()}),...(action==='test'?{signal:AbortSignal.timeout(110000)}:{})});
@@ -63,7 +65,7 @@ export function AIRecordPanel({record,mode,onReload,onDirty,onBusy}:{record:Reco
   const [text,setText]=useState(''),[draft,setDraft]=useState(''),[baseline,setBaseline]=useState({text:'',draft:''}),[seedVersion,setSeedVersion]=useState('');
   const dirty=text!==baseline.text||draft!==baseline.draft;
   const [speechActive,setSpeechActive]=useState(false),[speechPending,setSpeechPending]=useState(false),[uploadBusy,setUploadBusy]=useState(false),[uploadPending,setUploadPending]=useState(false);
-  const [supplementBusy,setSupplementBusy]=useState(false),[supplementPending,setSupplementPending]=useState(false),[supplementID,setSupplementID]=useState(''),[signatureConfirmed,setSignatureConfirmed]=useState(false);
+  const [supplementBusy,setSupplementBusy]=useState(false),[supplementPending,setSupplementPending]=useState(false),[supplementID,setSupplementID]=useState('');
   const blocked=busy||speechActive||speechPending||uploadBusy||uploadPending||supplementBusy||supplementPending;
   useEffect(()=>onBusy(busy||speechActive||uploadBusy||supplementBusy),[busy,speechActive,uploadBusy,supplementBusy,onBusy]);
   useEffect(()=>onDirty(dirty||speechPending||uploadPending||supplementPending),[dirty,speechPending,uploadPending,supplementPending,onDirty]);
@@ -79,7 +81,7 @@ export function AIRecordPanel({record,mode,onReload,onDirty,onBusy}:{record:Reco
   const generating=[purposeJob,packet].some(j=>j&&['queued','running'].includes(j.status));
   const amount=record.currency==='CNY'?record.amount:record.exchangeRate?.valid?record.exchangeRate.cnyAmount:null;
   const needsSupplement=record.invoiceRecipient?.requiresSignedSupplement===true;
-  const supplements=record.materials.filter(m=>m.role==='invoiceSupplement'&&m.integrity==='ok');
+  const supplementReason=needsSupplement?supplementReadyReason(currentSupplementReview(state?.jobs||[],supplementID,undefined,record.id),supplementID):'';
   if(record.priorStepsComplete||record.financeReviewPending||record.status==='completed')return null;
   return <section className="drawer-section ai-panel"><h3>{mode==='review'?'自动核验':'用途与申报材料'}</h3>
     {mode==='review'?<>
@@ -90,7 +92,7 @@ export function AIRecordPanel({record,mode,onReload,onDirty,onBusy}:{record:Reco
     </>:<>
       <label htmlFor="purpose-source">用途原文</label><textarea id="purpose-source" aria-label="用途原文" rows={4} value={text} onChange={e=>edit(()=>setText(e.target.value))} placeholder="用于什么科研或工作？用该服务完成了哪些具体工作？"/><SpeechInput disabled={busy||generating||uploadBusy} onAdopt={transcript=>edit(()=>setText(previous=>appendDictation(previous,transcript)))} onActivity={setSpeechActive} onPending={setSpeechPending}/>
       <MaterialUpload record={record} role="purposeEvidence" onReload={async()=>{const next=await onReload();await refresh();return next;}} onBusy={setUploadBusy} onPending={setUploadPending} disabled={busy||speechActive||speechPending}/>
-      {needsSupplement&&<div className="ai-recipient-supplement"><h4>本份材料的发票抬头说明</h4><p className="form-hint">这张发票 Bill to 不是 IHEP。请与用途说明同期准备一份抬头情况说明，领导签字后上传。该件在 ZIP 中与发票原件分开放置。</p><MaterialUpload record={record} role="invoiceSupplement" onReload={async()=>{const next=await onReload();await refresh();return next;}} onBusy={setSupplementBusy} onPending={setSupplementPending} disabled={busy||speechActive||speechPending}/>{supplements.length>0&&<label>选择本份材料的签字说明<select value={supplementID} onChange={e=>{setSupplementID(e.target.value);setSignatureConfirmed(false);}}><option value="">请选择签字件</option>{supplements.map(m=><option key={m.id} value={m.id}>{m.filename}</option>)}</select></label>}{supplementID&&<><AuthenticatedFileLink className="text-button" href={fileHref(supplementID)}>查看所选签字件</AuthenticatedFileLink><label className="ai-check"><input type="checkbox" checked={signatureConfirmed} onChange={e=>setSignatureConfirmed(e.target.checked)}/>我已核对领导签字及对应发票</label></>}</div>}
+      {needsSupplement&&<InvoiceSupplement records={[record]} state={state} value={supplementID} onSelection={setSupplementID} onReload={onReload} onRefresh={refresh} onBusy={setSupplementBusy} onPending={setSupplementPending} disabled={busy||speechActive||speechPending}/> }
       <div className="ai-actions"><button className="button secondary" disabled={blocked||generating} onClick={()=>void run(async()=>{await save();})}>保存用途</button><button className="button secondary" disabled={blocked||generating||!state?.settings.configured} onClick={()=>void run(async()=>{const saved=await save();await post('purpose-draft',{recordID:record.id,purposeVersion:saved.version});})}>DeepSeek 整理说明</button></div>
       {purposeJob&&<p className="small-muted">用途整理：{labels[purposeJob.status]}{purposeJob.error&&` · ${purposeJob.error}`}</p>}
       {purpose?.missing?.length? <div className="ai-missing">{purpose.missing.map((m,i)=><p key={i}>{m}</p>)}</div>:null}
@@ -98,7 +100,7 @@ export function AIRecordPanel({record,mode,onReload,onDirty,onBusy}:{record:Reco
       <p>本笔申报金额：<strong>{amount?`CNY ${amount}`:'待补发票日汇率'}</strong></p>
       <button className="button primary" disabled={blocked||generating||!draft.trim()||!amount||!record.paymentVerified} onClick={()=>void run(async()=>{let current=purpose;const attachments=record.materials.filter(m=>m.role==='purposeEvidence'&&m.integrity==='ok').map(m=>m.id);if(!current||text!==current.text||JSON.stringify(attachments)!==JSON.stringify(current.sourceMaterialIDs))current=await save();const latest=await onReload();const updated=latest.records.find(r=>r.id===record.id)!;await post('packet',{recordID:record.id,baseVersion:updated.version,purposeVersion:current.version,purpose:draft,claimedCNY:amount,confirmed:true});setBaseline({text,draft});})}>确认用途及金额，生成 PDF 草稿</button>
       {!record.paymentVerified&&<p className="form-hint">需先完成发票与实付款核验。</p>}
-      {packet&&<div className="ai-job"><strong>申报材料：{labels[packet.status]}</strong>{packet.error&&<p className="feedback error">{packet.error}</p>}{packet.result?.pdfMaterialID&&<><div className="ai-actions"><AuthenticatedFileLink className="button secondary" href={fileHref(packet.result.pdfMaterialID)}>查看报销说明 PDF（{packet.result.pages} 页）</AuthenticatedFileLink>{packet.result.docxMaterialID&&<AuthenticatedFileLink className="text-button" href={fileHref(packet.result.docxMaterialID)} download>下载说明 Word</AuthenticatedFileLink>}</div><p className="small-muted">请检查用途、金额及截图。确认后在主页面“申报 ZIP”中打包，发票原件会单独加入 ZIP。{needsSupplement?'请同时检查上方签字说明。':''}</p>{packet.status==='stale'?<p>内容已变化，请重新生成；上方文件仅供查看历史。</p>:packet.result.approved?<p>已确认材料备妥。</p>:<button className="button primary" disabled={blocked||needsSupplement&&(!supplementID||!signatureConfirmed)} onClick={()=>void run(async()=>{await post('approve-packet',{jobID:packet.id,confirmed:true,...(needsSupplement?{invoiceSupplementMaterialID:supplementID,signatureConfirmed}: {})});})}>我已检查材料，标记备妥</button>}</>}</div>}
+      {packet&&<div className="ai-job"><strong>申报材料：{labels[packet.status]}</strong>{packet.error&&<p className="feedback error">{packet.error}</p>}{packet.result?.pdfMaterialID&&<><div className="ai-actions"><AuthenticatedFileLink className="button secondary" href={fileHref(packet.result.pdfMaterialID)}>查看报销说明 PDF（{packet.result.pages} 页）</AuthenticatedFileLink>{packet.result.docxMaterialID&&<AuthenticatedFileLink className="text-button" href={fileHref(packet.result.docxMaterialID)} download>下载说明 Word</AuthenticatedFileLink>}</div><p className="small-muted">请检查用途、金额及截图。确认后在主页面“申报 ZIP”中打包，发票原件会单独加入 ZIP。{needsSupplement?'签字说明由服务器自动核查。':''}</p>{packet.status==='stale'?<p>内容已变化，请重新生成；上方文件仅供查看历史。</p>:packet.result.approved?<p>已确认材料备妥。</p>:<button className="button primary" disabled={blocked||!!supplementReason} title={supplementReason||undefined} onClick={()=>void run(async()=>{await post('approve-packet',{jobID:packet.id,confirmed:true,...(needsSupplement?{invoiceSupplementMaterialID:supplementID}: {})});})}>我已检查材料，标记备妥</button>}</>}</div>}
     </>}{(error||loadError)&&<p className="feedback error" role="alert">{error||loadError}</p>}
   </section>;
 }
